@@ -23,6 +23,8 @@ const state = {
   rightFeedbackGain: null,
   wetGain: null,
   previewObjectUrl: "",
+  pendingImage: null,
+  pendingImageLoadTimer: null,
   playheadFrame: null
 };
 
@@ -135,6 +137,11 @@ function loadImage(event) {
     return;
   }
 
+  if (isLikelyIos()) {
+    loadFileWithReader(source, isDefaultTestImage);
+    return;
+  }
+
   let objectUrl = "";
   try {
     objectUrl = URL.createObjectURL(source);
@@ -151,33 +158,69 @@ function loadImage(event) {
 
 function loadFileWithReader(file, isDefaultTestImage) {
   const reader = new FileReader();
-  reader.onload = () => loadImageElement(reader.result, isDefaultTestImage);
-  reader.onerror = () => finishImageLoadError("Изображение не удалось прочитать.", isDefaultTestImage);
+  setStatus("Чтение файла...");
+  reader.onload = () => {
+    if (typeof reader.result !== "string") {
+      finishImageLoadError("Изображение не удалось прочитать.", isDefaultTestImage);
+      return;
+    }
+    loadImageElement(reader.result, isDefaultTestImage);
+  };
+  reader.onerror = () => finishImageLoadError("Изображение не удалось прочитать. Попробуйте JPEG или PNG.", isDefaultTestImage);
   reader.readAsDataURL(file);
 }
 
 function loadImageElement(src, isDefaultTestImage, cleanup = null, fallback = null) {
   const image = new Image();
+  let settled = false;
+  state.pendingImage = image;
 
-  image.onload = () => {
-    if (cleanup) cleanup();
-    handleLoadedImage(image, src, isDefaultTestImage);
-  };
-
-  image.onerror = () => {
+  clearPendingImageTimer();
+  state.pendingImageLoadTimer = window.setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    state.pendingImage = null;
     if (cleanup) cleanup();
     if (fallback) {
       fallback();
       return;
     }
-    finishImageLoadError("Изображение не удалось загрузить.", isDefaultTestImage);
+    finishImageLoadError("Изображение не удалось декодировать. На iPhone лучше использовать JPEG или PNG.", isDefaultTestImage);
+  }, 18000);
+
+  const finish = (callback) => {
+    if (settled) return;
+    settled = true;
+    clearPendingImageTimer();
+    if (cleanup) cleanup();
+    callback();
   };
 
+  image.onload = () => {
+    finish(() => handleLoadedImage(image, src, isDefaultTestImage));
+  };
+
+  image.onerror = () => {
+    finish(() => {
+      if (fallback) {
+        fallback();
+        return;
+      }
+      finishImageLoadError("Изображение не удалось загрузить. Попробуйте JPEG или PNG.", isDefaultTestImage);
+    });
+  };
+
+  image.decoding = "async";
   image.src = src;
+
+  if (image.complete && image.naturalWidth > 0) {
+    window.setTimeout(() => image.onload(), 0);
+  }
 }
 
 function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
   try {
+    state.pendingImage = null;
     const processingSize = getProcessingSize(image.naturalWidth, image.naturalHeight);
     if (processingSize.wasScaled) {
       setStatus(`Уменьшаю изображение до ${processingSize.width} x ${processingSize.height} для обработки...`);
@@ -221,6 +264,18 @@ function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
   } catch (error) {
     finishImageLoadError("Изображение не удалось подготовить.", isDefaultTestImage);
   }
+}
+
+function clearPendingImageTimer() {
+  if (state.pendingImageLoadTimer) {
+    window.clearTimeout(state.pendingImageLoadTimer);
+    state.pendingImageLoadTimer = null;
+  }
+}
+
+function isLikelyIos() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
 function setOriginalPreview(src) {
