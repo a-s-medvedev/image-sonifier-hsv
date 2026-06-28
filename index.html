@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Сонификатор изображений</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <h1>Сонификатор изображений</h1>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="Инструмент сонификации изображения">
+        <section class="panel controls-panel" aria-label="Управление">
+          <div class="control-group upload-box">
+            <div class="group-heading">
+              <span>Источник</span>
+              <small>Тестовое изображение</small>
+            </div>
+            <label class="file-picker-label">
+              <span>Загрузить изображение</span>
+              <span class="file-picker">
+                <input id="imageInput" type="file" accept="image/*">
+                <span class="file-button">Выбрать файл</span>
+                <span id="fileName" class="file-name">Тестовое изображение</span>
+              </span>
+            </label>
+          </div>
+
+          <div class="control-group transport-group">
+            <div class="group-heading">
+              <span>Воспроизведение</span>
+            </div>
+            <div class="button-row">
+              <button id="playButton" class="primary-action" type="button">Играть</button>
+              <button id="stopButton" class="secondary-action" type="button">Стоп</button>
+              <button id="exportButton" class="secondary-action" type="button">Экспорт WAV</button>
+            </div>
+            <label class="readiness-control">
+              <span>Готовность звука <output id="readinessValue">0%</output></span>
+              <progress id="readinessProgress" max="100" value="0"></progress>
+            </label>
+            <p id="statusText" class="status-text" role="status" aria-live="polite">Загрузка тестового изображения...</p>
+          </div>
+
+          <section class="control-group model-group" aria-label="Карта сонификации">
+            <div class="group-heading">
+              <span>Модель</span>
+            </div>
+            <label>
+              Режим
+              <select id="modeSelect">
+                <option value="scientific">Научный</option>
+                <option value="color">Цветной</option>
+                <option value="art">Художественный</option>
+              </select>
+            </label>
+
+            <label>
+              Детализация частот
+              <select id="frequencyDetailSelect">
+                <option value="1" selected>1x / быстро</option>
+                <option value="2">2x / высокая детализация</option>
+              </select>
+            </label>
+            <p class="control-note">2x улучшает детализацию, но может быть медленнее на телефонах и старых компьютерах.</p>
+          </section>
+
+          <section class="control-group signal-group" aria-label="Настройки звука">
+            <div class="group-heading">
+              <span>Сигнал</span>
+            </div>
+            <label>
+              <span>Длительность <output id="durationValue">5.0 с</output></span>
+              <input id="durationSlider" type="range" min="1" max="12" step="0.5" value="5">
+            </label>
+
+            <label>
+              <span>Мин. частота <output id="minFreqValue">100 Гц</output></span>
+              <input id="minFreqSlider" type="range" min="40" max="1200" step="10" value="100">
+            </label>
+
+            <label>
+              <span>Макс. частота <output id="maxFreqValue">5000 Гц</output></span>
+              <input id="maxFreqSlider" type="range" min="500" max="10000" step="100" value="5000">
+            </label>
+
+            <label>
+              <span>Контраст <output id="contrastValue">1.0</output></span>
+              <input id="contrastSlider" type="range" min="0.2" max="3" step="0.1" value="1">
+            </label>
+
+            <label>
+              <span>Громкость <output id="volumeValue">70%</output></span>
+              <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="0.7">
+            </label>
+          </section>
+
+          <section class="control-group effect-panel" aria-label="HSV тембральные параметры">
+            <div class="group-heading">
+              <span>Тембр</span>
+            </div>
+            <p>Эти параметры применяются во время воспроизведения: оттенок меняет гармонический профиль тембра, насыщенность добавляет спектральную плотность, пространство расширяет стерео-поле.</p>
+
+            <label>
+              <span>Оттенок <output id="redEffectValue">100%</output></span>
+              <input id="redEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
+            </label>
+
+            <label>
+              <span>Насыщенность <output id="greenEffectValue">100%</output></span>
+              <input id="greenEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
+            </label>
+
+            <label>
+              <span>Пространство <output id="blueEffectValue">100%</output></span>
+              <input id="blueEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
+            </label>
+          </section>
+
+        </section>
+
+        <section class="visuals" aria-label="Предпросмотр изображения">
+          <div class="panel preview-panel original-panel">
+            <div class="panel-title">
+              <h2>Исходное изображение</h2>
+            </div>
+            <div class="image-frame">
+              <img id="originalImage" alt="Предпросмотр исходного изображения">
+              <span id="originalPlaceholder">Изображение не загружено</span>
+            </div>
+          </div>
+
+          <div class="panel preview-panel spectrogram-panel">
+            <div class="panel-title">
+              <h2>Спектрограмма яркости</h2>
+            </div>
+            <div class="spectrogram-plot">
+              <div class="axis-label y-axis">Частота</div>
+              <div class="freq-axis" id="freqAxis" aria-hidden="true"></div>
+              <div class="spectrogram-canvas-wrap">
+                <canvas id="previewCanvas" width="256" height="128"></canvas>
+                <div id="playhead" class="playhead" aria-hidden="true"></div>
+              </div>
+              <div class="time-axis" id="timeAxis" aria-hidden="true"></div>
+              <div class="axis-label x-axis">Время</div>
+            </div>
+            <div class="checkbox-grid spectrogram-options">
+              <label><input id="invertCheckbox" type="checkbox"> Инвертировать яркость</label>
+              <label><input id="reverseCheckbox" type="checkbox"> Обратить время</label>
+              <label><input id="loopCheckbox" type="checkbox" checked> Зациклить</label>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
