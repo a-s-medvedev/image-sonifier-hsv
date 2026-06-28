@@ -22,9 +22,6 @@ const state = {
   leftFeedbackGain: null,
   rightFeedbackGain: null,
   wetGain: null,
-  previewObjectUrl: "",
-  pendingImage: null,
-  pendingImageLoadTimer: null,
   playheadFrame: null
 };
 
@@ -130,97 +127,48 @@ function loadImage(event) {
 
   const isDefaultTestImage = typeof source === "string" && source.includes("test-color-spectrogram");
   elements.fileName.textContent = typeof source === "string" ? "Тестовое изображение" : source.name;
-  setImageLoading(true, "Загрузка изображения...");
+
+  if (source === "generated-test-pattern") {
+    setImageLoading(true, "Создание тестового изображения...");
+    loadGeneratedTestPattern();
+    return;
+  }
 
   if (typeof source === "string") {
+    setImageLoading(true, "Загрузка изображения...");
     loadImageElement(source, isDefaultTestImage);
     return;
   }
 
-  if (isLikelyIos()) {
-    loadFileWithReader(source, isDefaultTestImage);
-    return;
-  }
-
-  let objectUrl = "";
-  try {
-    objectUrl = URL.createObjectURL(source);
-  } catch (error) {
-    loadFileWithReader(source, isDefaultTestImage);
-    return;
-  }
-
-  loadImageElement(objectUrl, isDefaultTestImage, null, () => {
-    URL.revokeObjectURL(objectUrl);
-    loadFileWithReader(source, isDefaultTestImage);
-  });
+  loadFileImage(source);
 }
 
-function loadFileWithReader(file, isDefaultTestImage) {
+function loadFileImage(file) {
   const reader = new FileReader();
   setStatus("Чтение файла...");
+
   reader.onload = () => {
     if (typeof reader.result !== "string") {
-      finishImageLoadError("Изображение не удалось прочитать.", isDefaultTestImage);
+      finishImageLoadError("Изображение не удалось прочитать.", false);
       return;
     }
-    loadImageElement(reader.result, isDefaultTestImage);
+
+    loadImageElement(reader.result, false);
   };
-  reader.onerror = () => finishImageLoadError("Изображение не удалось прочитать. Попробуйте JPEG или PNG.", isDefaultTestImage);
+
+  reader.onerror = () => finishImageLoadError("Изображение не удалось прочитать.", false);
   reader.readAsDataURL(file);
 }
 
-function loadImageElement(src, isDefaultTestImage, cleanup = null, fallback = null) {
+function loadImageElement(src, isDefaultTestImage) {
   const image = new Image();
-  let settled = false;
-  state.pendingImage = image;
-
-  clearPendingImageTimer();
-  state.pendingImageLoadTimer = window.setTimeout(() => {
-    if (settled) return;
-    settled = true;
-    state.pendingImage = null;
-    if (cleanup) cleanup();
-    if (fallback) {
-      fallback();
-      return;
-    }
-    finishImageLoadError("Изображение не удалось декодировать. На iPhone лучше использовать JPEG или PNG.", isDefaultTestImage);
-  }, 18000);
-
-  const finish = (callback) => {
-    if (settled) return;
-    settled = true;
-    clearPendingImageTimer();
-    if (cleanup) cleanup();
-    callback();
-  };
-
-  image.onload = () => {
-    finish(() => handleLoadedImage(image, src, isDefaultTestImage));
-  };
-
-  image.onerror = () => {
-    finish(() => {
-      if (fallback) {
-        fallback();
-        return;
-      }
-      finishImageLoadError("Изображение не удалось загрузить. Попробуйте JPEG или PNG.", isDefaultTestImage);
-    });
-  };
-
-  image.decoding = "async";
+  image.onload = () => handleLoadedImage(image, src, isDefaultTestImage);
+  image.onerror = () => finishImageLoadError("Изображение не удалось загрузить.", isDefaultTestImage);
   image.src = src;
-
-  if (image.complete && image.naturalWidth > 0) {
-    window.setTimeout(() => image.onload(), 0);
-  }
 }
 
 function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
   try {
-    state.pendingImage = null;
     const processingSize = getProcessingSize(image.naturalWidth, image.naturalHeight);
     if (processingSize.wasScaled) {
       setStatus(`Уменьшаю изображение до ${processingSize.width} x ${processingSize.height} для обработки...`);
@@ -228,7 +176,7 @@ function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
       setStatus("Обработка изображения...");
     }
 
-    setOriginalPreview(previewSrc);
+    elements.originalImage.src = previewSrc;
     elements.originalFrame.classList.add("has-image");
     elements.originalFrame.style.setProperty("--image-aspect", `${image.naturalWidth} / ${image.naturalHeight}`);
 
@@ -263,30 +211,6 @@ function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
     setImageLoading(false, "Готово.");
   } catch (error) {
     finishImageLoadError("Изображение не удалось подготовить.", isDefaultTestImage);
-  }
-}
-
-function clearPendingImageTimer() {
-  if (state.pendingImageLoadTimer) {
-    window.clearTimeout(state.pendingImageLoadTimer);
-    state.pendingImageLoadTimer = null;
-  }
-}
-
-function isLikelyIos() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent)
-    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-}
-
-function setOriginalPreview(src) {
-  if (state.previewObjectUrl && state.previewObjectUrl !== src) {
-    URL.revokeObjectURL(state.previewObjectUrl);
-    state.previewObjectUrl = "";
-  }
-
-  elements.originalImage.src = src;
-  if (typeof src === "string" && src.startsWith("blob:")) {
-    state.previewObjectUrl = src;
   }
 }
 
@@ -366,7 +290,7 @@ function loadGeneratedTestPattern() {
   }
 
   ctx.putImageData(imageData, 0, 0);
-  setOriginalPreview(hiddenCanvas.toDataURL("image/png"));
+  elements.originalImage.src = hiddenCanvas.toDataURL("image/png");
   storeRawPixels(imageData.data);
   state.imageLoaded = true;
   processImage();
