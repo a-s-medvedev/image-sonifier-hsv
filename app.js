@@ -1351,7 +1351,7 @@ function getColumnGlowProfile(progress) {
 
 function setStatus(message = "") {
   if (!elements.statusText) return;
-  elements.statusText.textContent = message;
+  elements.statusText.textContent = message === "Готово." ? "" : message;
 }
 
 function clamp(value, min, max) {
