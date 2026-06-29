@@ -22,6 +22,7 @@ const state = {
   leftFeedbackGain: null,
   rightFeedbackGain: null,
   wetGain: null,
+  previewObjectUrl: "",
   playheadFrame: null
 };
 
@@ -64,7 +65,6 @@ const elements = {
 };
 
 const hiddenCanvas = document.createElement("canvas");
-const previewBitmapCanvas = document.createElement("canvas");
 const MAX_PROCESSING_SIDE = 2048;
 const DEFAULT_TEST_IMAGE = "test-color-spectrogram.png";
 
@@ -128,43 +128,51 @@ function loadImage(event) {
 
   const isDefaultTestImage = typeof source === "string" && source.includes("test-color-spectrogram");
   elements.fileName.textContent = typeof source === "string" ? "Тестовое изображение" : source.name;
-
-  if (source === "generated-test-pattern") {
-    setImageLoading(true, "Создание тестового изображения...");
-    loadGeneratedTestPattern();
-    return;
-  }
+  setImageLoading(true, "Загрузка изображения...");
 
   if (typeof source === "string") {
-    setImageLoading(true, "Загрузка изображения...");
     loadImageElement(source, isDefaultTestImage);
     return;
   }
 
-  loadFileImage(source);
+  let objectUrl = "";
+  try {
+    objectUrl = URL.createObjectURL(source);
+  } catch (error) {
+    loadFileWithReader(source, isDefaultTestImage);
+    return;
+  }
+
+  loadImageElement(objectUrl, isDefaultTestImage, null, () => {
+    URL.revokeObjectURL(objectUrl);
+    loadFileWithReader(source, isDefaultTestImage);
+  });
 }
 
-function loadFileImage(file) {
+function loadFileWithReader(file, isDefaultTestImage) {
   const reader = new FileReader();
-  setStatus("Чтение файла...");
-
-  reader.onload = () => {
-    if (typeof reader.result !== "string") {
-      finishImageLoadError("Изображение не удалось прочитать.", false);
-      return;
-    }
-
-    loadImageElement(reader.result, false);
-  };
-
-  reader.onerror = () => finishImageLoadError("Изображение не удалось прочитать.", false);
+  reader.onload = () => loadImageElement(reader.result, isDefaultTestImage);
+  reader.onerror = () => finishImageLoadError("Изображение не удалось прочитать.", isDefaultTestImage);
   reader.readAsDataURL(file);
 }
 
-function loadImageElement(src, isDefaultTestImage) {
+function loadImageElement(src, isDefaultTestImage, cleanup = null, fallback = null) {
   const image = new Image();
-  image.onload = () => handleLoadedImage(image, src, isDefaultTestImage);
-  image.onerror = () => finishImageLoadError("Изображение не удалось загрузить.", isDefaultTestImage);
+
+  image.onload = () => {
+    if (cleanup) cleanup();
+    handleLoadedImage(image, src, isDefaultTestImage);
+  };
+
+  image.onerror = () => {
+    if (cleanup) cleanup();
+    if (fallback) {
+      fallback();
+      return;
+    }
+    finishImageLoadError("Изображение не удалось загрузить.", isDefaultTestImage);
+  };
+
   image.src = src;
 }
 
@@ -177,7 +185,7 @@ function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
       setStatus("Обработка изображения...");
     }
 
-    elements.originalImage.src = previewSrc;
+    setOriginalPreview(previewSrc);
     elements.originalFrame.classList.add("has-image");
     elements.originalFrame.style.setProperty("--image-aspect", `${image.naturalWidth} / ${image.naturalHeight}`);
 
@@ -212,6 +220,18 @@ function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
     setImageLoading(false, "Готово.");
   } catch (error) {
     finishImageLoadError("Изображение не удалось подготовить.", isDefaultTestImage);
+  }
+}
+
+function setOriginalPreview(src) {
+  if (state.previewObjectUrl && state.previewObjectUrl !== src) {
+    URL.revokeObjectURL(state.previewObjectUrl);
+    state.previewObjectUrl = "";
+  }
+
+  elements.originalImage.src = src;
+  if (typeof src === "string" && src.startsWith("blob:")) {
+    state.previewObjectUrl = src;
   }
 }
 
@@ -291,7 +311,7 @@ function loadGeneratedTestPattern() {
   }
 
   ctx.putImageData(imageData, 0, 0);
-  elements.originalImage.src = hiddenCanvas.toDataURL("image/png");
+  setOriginalPreview(hiddenCanvas.toDataURL("image/png"));
   storeRawPixels(imageData.data);
   state.imageLoaded = true;
   processImage();
@@ -736,14 +756,8 @@ function clearAudioCache() {
 }
 
 function drawPreview() {
-  if (!state.processedPixels || state.width === 0 || state.height === 0) return;
-
-  previewBitmapCanvas.width = state.width;
-  previewBitmapCanvas.height = state.height;
-
-  const bitmapCtx = previewBitmapCanvas.getContext("2d");
-  const previewCtx = elements.previewCanvas.getContext("2d");
-  const imageData = bitmapCtx.createImageData(state.width, state.height);
+  const ctx = elements.previewCanvas.getContext("2d");
+  const imageData = ctx.createImageData(state.width, state.height);
 
   for (let i = 0; i < state.width * state.height; i += 1) {
     const sourceIndex = i * 4;
@@ -754,9 +768,7 @@ function drawPreview() {
     imageData.data[sourceIndex + 3] = 255;
   }
 
-  bitmapCtx.putImageData(imageData, 0, 0);
-  previewCtx.clearRect(0, 0, state.width, state.height);
-  previewCtx.drawImage(previewBitmapCanvas, 0, 0);
+  ctx.putImageData(imageData, 0, 0);
 }
 
 function makeRowFrequencies(minFrequency, maxFrequency, rowCount) {
