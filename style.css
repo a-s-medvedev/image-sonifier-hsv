@@ -591,6 +591,12 @@ canvas {
     display: contents;
   }
 
+  .control-group,
+  .preview-panel {
+    width: 100%;
+    align-self: stretch;
+  }
+
   .upload-box {
     order: 1;
   }
