@@ -64,6 +64,7 @@ const elements = {
 };
 
 const hiddenCanvas = document.createElement("canvas");
+const previewBitmapCanvas = document.createElement("canvas");
 const MAX_PROCESSING_SIDE = 2048;
 const DEFAULT_TEST_IMAGE = "test-color-spectrogram.png";
 
@@ -735,8 +736,14 @@ function clearAudioCache() {
 }
 
 function drawPreview() {
-  const ctx = elements.previewCanvas.getContext("2d");
-  const imageData = ctx.createImageData(state.width, state.height);
+  if (!state.processedPixels || state.width === 0 || state.height === 0) return;
+
+  previewBitmapCanvas.width = state.width;
+  previewBitmapCanvas.height = state.height;
+
+  const bitmapCtx = previewBitmapCanvas.getContext("2d");
+  const previewCtx = elements.previewCanvas.getContext("2d");
+  const imageData = bitmapCtx.createImageData(state.width, state.height);
 
   for (let i = 0; i < state.width * state.height; i += 1) {
     const sourceIndex = i * 4;
@@ -747,7 +754,9 @@ function drawPreview() {
     imageData.data[sourceIndex + 3] = 255;
   }
 
-  ctx.putImageData(imageData, 0, 0);
+  bitmapCtx.putImageData(imageData, 0, 0);
+  previewCtx.clearRect(0, 0, state.width, state.height);
+  previewCtx.drawImage(previewBitmapCanvas, 0, 0);
 }
 
 function makeRowFrequencies(minFrequency, maxFrequency, rowCount) {
