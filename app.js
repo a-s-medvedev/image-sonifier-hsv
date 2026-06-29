@@ -65,7 +65,7 @@ const elements = {
 };
 
 const hiddenCanvas = document.createElement("canvas");
-const DEFAULT_TEST_IMAGE = "test-color-spectrogram.png";
+const DEFAULT_TEST_IMAGE = "generated-test-pattern";
 
 elements.imageInput.addEventListener("change", loadImage);
 elements.playButton.addEventListener("click", playAudio);
@@ -125,12 +125,19 @@ function loadImage(event) {
   const source = typeof event === "string" ? event : event.target.files[0];
   if (!source) return;
 
-  const isDefaultTestImage = typeof source === "string" && source.includes("test-color-spectrogram");
+  const isDefaultTestImage = typeof source === "string" && source === DEFAULT_TEST_IMAGE;
   elements.fileName.textContent = typeof source === "string" ? "Тестовое изображение" : source.name;
+
+  if (isDefaultTestImage) {
+    setImageLoading(true, "Создание тестового изображения...");
+    loadGeneratedTestPattern();
+    return;
+  }
+
   setImageLoading(true, "Загрузка изображения...");
 
   if (typeof source === "string") {
-    loadImageElement(source, isDefaultTestImage);
+    loadImageElement(source, false);
     return;
   }
 
