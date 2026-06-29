@@ -503,7 +503,7 @@ async function playAudio() {
   state.source.start();
   startPlayheadAnimation(startedAt, buffer.duration);
   setGenerating(false);
-  setStatus("Играет сонифицированное изображение.");
+  setStatus("");
 }
 
 function stopAudio() {
