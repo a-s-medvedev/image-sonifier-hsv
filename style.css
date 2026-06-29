@@ -610,7 +610,10 @@ canvas {
     padding-top: 8px;
   }
 
-  .button-row,
+  .button-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .spectrogram-options {
     grid-template-columns: 1fr;
   }

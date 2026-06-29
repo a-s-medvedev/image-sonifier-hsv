@@ -125,6 +125,16 @@
         </section>
 
         <section class="visuals" aria-label="Предпросмотр изображения">
+          <div class="panel preview-panel original-panel">
+            <div class="panel-title">
+              <h2>Исходное изображение</h2>
+            </div>
+            <div class="image-frame">
+              <img id="originalImage" alt="Предпросмотр исходного изображения">
+              <span id="originalPlaceholder">Изображение не загружено</span>
+            </div>
+          </div>
+
           <div class="panel preview-panel spectrogram-panel">
             <div class="panel-title">
               <h2>Спектрограмма</h2>
@@ -143,16 +153,6 @@
               <label><input id="invertCheckbox" type="checkbox"> Инвертировать яркость</label>
               <label><input id="reverseCheckbox" type="checkbox"> Обратить время</label>
               <label><input id="loopCheckbox" type="checkbox" checked> Зациклить</label>
-            </div>
-          </div>
-
-          <div class="panel preview-panel original-panel">
-            <div class="panel-title">
-              <h2>Исходное изображение</h2>
-            </div>
-            <div class="image-frame">
-              <img id="originalImage" alt="Предпросмотр исходного изображения">
-              <span id="originalPlaceholder">Изображение не загружено</span>
             </div>
           </div>
         </section>
