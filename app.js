@@ -23,7 +23,9 @@ const state = {
   rightFeedbackGain: null,
   wetGain: null,
   previewObjectUrl: "",
-  playheadFrame: null
+  playheadFrame: null,
+  sourceImage: null,
+  sourceIsDefaultImage: false
 };
 
 const elements = {
@@ -37,6 +39,7 @@ const elements = {
   exportButton: document.getElementById("exportButton"),
   modeSelect: document.getElementById("modeSelect"),
   frequencyDetailSelect: document.getElementById("frequencyDetailSelect"),
+  imageSizeLimitSelect: document.getElementById("imageSizeLimitSelect"),
   durationSlider: document.getElementById("durationSlider"),
   minFreqSlider: document.getElementById("minFreqSlider"),
   maxFreqSlider: document.getElementById("maxFreqSlider"),
@@ -93,6 +96,21 @@ elements.volumeSlider.addEventListener("input", () => {
     setGenerationProgress(0);
     updateRealtimeAudioControls();
   });
+});
+
+elements.imageSizeLimitSelect.addEventListener("input", () => {
+  if (!state.imageLoaded) return;
+
+  if (state.sourceImage) {
+    setStatus("Преобразование изображения...");
+    convertSourceImageToWorkingCanvas(state.sourceIsDefaultImage);
+    setStatus("Готово.");
+    return;
+  }
+
+  processImage();
+  drawPreview();
+  clearAudioCache();
 });
 
 [
@@ -186,42 +204,70 @@ function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
   try {
     setStatus("Обработка изображения...");
 
+    state.sourceImage = image;
+    state.sourceIsDefaultImage = isDefaultTestImage;
     setOriginalPreview(previewSrc);
     elements.originalFrame.classList.add("has-image");
     elements.originalFrame.style.setProperty("--image-aspect", `${image.naturalWidth} / ${image.naturalHeight}`);
 
-    state.width = image.naturalWidth;
-    state.height = image.naturalHeight;
-    hiddenCanvas.width = state.width;
-    hiddenCanvas.height = state.height;
-    elements.previewCanvas.width = state.width;
-    elements.previewCanvas.height = state.height;
-
-    const ctx = hiddenCanvas.getContext("2d", { willReadFrequently: true });
-    ctx.clearRect(0, 0, state.width, state.height);
-    ctx.drawImage(image, 0, 0, state.width, state.height);
-
-    let data;
-    try {
-      data = ctx.getImageData(0, 0, state.width, state.height).data;
-    } catch (error) {
-      if (isDefaultTestImage) {
-        loadGeneratedTestPattern();
-        return;
-      }
-      finishImageLoadError("Изображение не удалось обработать через canvas.", false);
-      return;
-    }
-
-    storeRawPixels(data);
-    state.imageLoaded = true;
-    processImage();
-    drawPreview();
-    clearAudioCache();
+    if (!convertSourceImageToWorkingCanvas(isDefaultTestImage)) return;
     setImageLoading(false, "Готово.");
   } catch (error) {
     finishImageLoadError("Изображение не удалось подготовить.", isDefaultTestImage);
   }
+}
+
+function convertSourceImageToWorkingCanvas(isDefaultTestImage) {
+  const dimensions = fitImageToSelectedLimit(state.sourceImage.naturalWidth, state.sourceImage.naturalHeight);
+
+  state.width = dimensions.width;
+  state.height = dimensions.height;
+  hiddenCanvas.width = state.width;
+  hiddenCanvas.height = state.height;
+  elements.previewCanvas.width = state.width;
+  elements.previewCanvas.height = state.height;
+
+  const ctx = hiddenCanvas.getContext("2d", { willReadFrequently: true });
+  ctx.clearRect(0, 0, state.width, state.height);
+  ctx.drawImage(state.sourceImage, 0, 0, state.width, state.height);
+
+  let data;
+  try {
+    data = ctx.getImageData(0, 0, state.width, state.height).data;
+  } catch (error) {
+    if (isDefaultTestImage) {
+      loadGeneratedTestPattern();
+      return false;
+    }
+    finishImageLoadError("Изображение не удалось обработать через canvas.", false);
+    return false;
+  }
+
+  storeRawPixels(data);
+  state.imageLoaded = true;
+  processImage();
+  drawPreview();
+  clearAudioCache();
+  return true;
+}
+
+function fitImageToSelectedLimit(width, height) {
+  const limitValue = elements.imageSizeLimitSelect.value;
+  if (limitValue === "none") {
+    return { width, height };
+  }
+
+  const maxSize = Number(limitValue);
+  const largestSide = Math.max(width, height);
+  if (!maxSize || largestSide <= maxSize) {
+    return { width, height };
+  }
+
+  const scale = maxSize / largestSide;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale))
+  };
 }
 
 function setOriginalPreview(src) {
