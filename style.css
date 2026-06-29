@@ -593,82 +593,19 @@ canvas {
   .app-shell {
     width: min(100% - 14px, 1360px);
     padding-top: 8px;
-    padding-bottom: calc(86px + env(safe-area-inset-bottom));
-  }
-
-  .workspace {
-    display: flex;
-    flex-direction: column;
-    gap: 9px;
-  }
-
-  .controls-panel,
-  .visuals {
-    display: contents;
-  }
-
-  .upload-box {
-    order: 4;
-  }
-
-  .transport-group {
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
-    order: 3;
-    padding-bottom: calc(11px + env(safe-area-inset-bottom));
-    box-shadow: 0 -12px 26px rgba(2, 8, 23, 0.18);
-  }
-
-  .model-group {
-    order: 5;
-  }
-
-  .signal-group {
-    order: 6;
-  }
-
-  .effect-panel {
-    order: 7;
-  }
-
-  .original-panel {
-    order: 1;
-  }
-
-  .spectrogram-panel {
-    order: 2;
-  }
-
-  input[type="file"],
-  select,
-  button {
-    min-height: 44px;
-  }
-
-  input[type="range"] {
-    height: 30px;
   }
 
   .button-row,
   .spectrogram-options {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .image-frame {
-    height: 24vh;
-    min-height: 140px;
+    max-height: 20vh;
   }
 
   .spectrogram-plot {
     grid-template-columns: 18px 58px minmax(0, 1fr);
-    grid-template-rows: minmax(190px, 34vh) auto auto;
-  }
-}
-
-@media (max-width: 440px) {
-  .button-row,
-  .spectrogram-options {
-    grid-template-columns: 1fr;
+    grid-template-rows: minmax(150px, 38vh) auto auto;
   }
 }

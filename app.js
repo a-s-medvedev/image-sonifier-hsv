@@ -65,7 +65,6 @@ const elements = {
 };
 
 const hiddenCanvas = document.createElement("canvas");
-const MAX_PROCESSING_SIDE = 2048;
 const DEFAULT_TEST_IMAGE = "test-color-spectrogram.png";
 
 elements.imageInput.addEventListener("change", loadImage);
@@ -178,19 +177,14 @@ function loadImageElement(src, isDefaultTestImage, cleanup = null, fallback = nu
 
 function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
   try {
-    const processingSize = getProcessingSize(image.naturalWidth, image.naturalHeight);
-    if (processingSize.wasScaled) {
-      setStatus(`Уменьшаю изображение до ${processingSize.width} x ${processingSize.height} для обработки...`);
-    } else {
-      setStatus("Обработка изображения...");
-    }
+    setStatus("Обработка изображения...");
 
     setOriginalPreview(previewSrc);
     elements.originalFrame.classList.add("has-image");
     elements.originalFrame.style.setProperty("--image-aspect", `${image.naturalWidth} / ${image.naturalHeight}`);
 
-    state.width = processingSize.width;
-    state.height = processingSize.height;
+    state.width = image.naturalWidth;
+    state.height = image.naturalHeight;
     hiddenCanvas.width = state.width;
     hiddenCanvas.height = state.height;
     elements.previewCanvas.width = state.width;
@@ -233,20 +227,6 @@ function setOriginalPreview(src) {
   if (typeof src === "string" && src.startsWith("blob:")) {
     state.previewObjectUrl = src;
   }
-}
-
-function getProcessingSize(width, height) {
-  const longestSide = Math.max(width, height);
-  if (longestSide <= MAX_PROCESSING_SIDE) {
-    return { width, height, wasScaled: false };
-  }
-
-  const scale = MAX_PROCESSING_SIDE / longestSide;
-  return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale)),
-    wasScaled: true
-  };
 }
 
 function finishImageLoadError(message, isDefaultTestImage) {
