@@ -586,13 +586,41 @@ canvas {
     flex-direction: column;
   }
 
-  .controls-panel {
-    order: 2;
-    position: static;
+  .controls-panel,
+  .visuals {
+    display: contents;
   }
 
-  .visuals {
+  .upload-box {
     order: 1;
+  }
+
+  .original-panel {
+    order: 2;
+  }
+
+  .spectrogram-panel {
+    order: 3;
+  }
+
+  .transport-group {
+    order: 4;
+  }
+
+  .effect-panel {
+    order: 5;
+  }
+
+  .signal-group {
+    order: 6;
+  }
+
+  .model-group {
+    order: 7;
+  }
+
+  .controls-panel {
+    position: static;
   }
 
   .button-row {
