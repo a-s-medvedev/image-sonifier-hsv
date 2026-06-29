@@ -18,15 +18,13 @@
         <section class="panel controls-panel" aria-label="Управление">
           <div class="control-group upload-box">
             <div class="group-heading">
-              <span>Источник</span>
-              <small>Тестовое изображение</small>
+              <span>Изображение</span>
             </div>
             <label class="file-picker-label">
-              <span>Загрузить изображение</span>
               <span class="file-picker">
                 <input id="imageInput" type="file" accept="image/*">
                 <span class="file-button">Выбрать файл</span>
-                <span id="fileName" class="file-name">Тестовое изображение</span>
+                <span id="fileName" class="visually-hidden">Тестовое изображение</span>
               </span>
             </label>
           </div>
@@ -46,29 +44,6 @@
             </label>
             <p id="statusText" class="status-text" role="status" aria-live="polite">Загрузка тестового изображения...</p>
           </div>
-
-          <section class="control-group model-group" aria-label="Карта сонификации">
-            <div class="group-heading">
-              <span>Модель</span>
-            </div>
-            <label>
-              Режим
-              <select id="modeSelect">
-                <option value="scientific">Научный</option>
-                <option value="color">Цветной</option>
-                <option value="art">Художественный</option>
-              </select>
-            </label>
-
-            <label>
-              Детализация частот
-              <select id="frequencyDetailSelect">
-                <option value="1" selected>1x / быстро</option>
-                <option value="2">2x / высокая детализация</option>
-              </select>
-            </label>
-            <p class="control-note">2x улучшает детализацию, но может быть медленнее на телефонах и старых компьютерах.</p>
-          </section>
 
           <section class="control-group signal-group" aria-label="Настройки звука">
             <div class="group-heading">
@@ -104,7 +79,7 @@
             <div class="group-heading">
               <span>Тембр</span>
             </div>
-            <p>Эти параметры применяются во время воспроизведения: оттенок меняет гармонический профиль тембра, насыщенность добавляет спектральную плотность, пространство расширяет стерео-поле.</p>
+            <p>Работают в реальном времени только в Цветном и Художественном режимах.</p>
 
             <label>
               <span>Оттенок <output id="redEffectValue">100%</output></span>
@@ -120,6 +95,30 @@
               <span>Пространство <output id="blueEffectValue">100%</output></span>
               <input id="blueEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
             </label>
+          </section>
+
+          <section class="control-group model-group" aria-label="Карта сонификации">
+            <div class="group-heading">
+              <span>Модель</span>
+            </div>
+            <label>
+              Режим
+              <select id="modeSelect">
+                <option value="scientific">Научный</option>
+                <option value="color" selected>Цветной</option>
+                <option value="art">Художественный</option>
+              </select>
+            </label>
+            <p class="control-note">Цветной и Художественный режимы учитывают цвет изображения.</p>
+
+            <label>
+              Детализация частот
+              <select id="frequencyDetailSelect">
+                <option value="1" selected>1x / быстро</option>
+                <option value="2">2x / высокая детализация</option>
+              </select>
+            </label>
+            <p class="control-note">2x улучшает детализацию, но может быть медленнее на телефонах и старых компьютерах.</p>
           </section>
 
         </section>
