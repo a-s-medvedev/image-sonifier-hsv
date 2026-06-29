@@ -582,11 +582,17 @@ canvas {
 
 @media (max-width: 980px) {
   .workspace {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
   }
 
   .controls-panel {
+    order: 2;
     position: static;
+  }
+
+  .visuals {
+    order: 1;
   }
 
   .button-row {

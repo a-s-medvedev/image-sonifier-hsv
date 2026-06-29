@@ -45,10 +45,33 @@
             <p id="statusText" class="status-text" role="status" aria-live="polite">Загрузка тестового изображения...</p>
           </div>
 
+          <section class="control-group effect-panel" aria-label="HSV тембральные параметры">
+            <div class="group-heading">
+              <span>Тембр</span>
+            </div>
+            <p>Работают в реальном времени только в Цветном и Художественном режимах.</p>
+
+            <label>
+              <span>Оттенок <output id="redEffectValue">100%</output></span>
+              <input id="redEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
+            </label>
+
+            <label>
+              <span>Насыщенность <output id="greenEffectValue">100%</output></span>
+              <input id="greenEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
+            </label>
+
+            <label>
+              <span>Пространство <output id="blueEffectValue">100%</output></span>
+              <input id="blueEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
+            </label>
+          </section>
+
           <section class="control-group signal-group" aria-label="Настройки звука">
             <div class="group-heading">
               <span>Сигнал</span>
             </div>
+
             <label>
               <span>Длительность <output id="durationValue">5.0 с</output></span>
               <input id="durationSlider" type="range" min="1" max="12" step="0.5" value="5">
@@ -72,28 +95,6 @@
             <label>
               <span>Громкость <output id="volumeValue">70%</output></span>
               <input id="volumeSlider" type="range" min="0" max="1" step="0.01" value="0.7">
-            </label>
-          </section>
-
-          <section class="control-group effect-panel" aria-label="HSV тембральные параметры">
-            <div class="group-heading">
-              <span>Тембр</span>
-            </div>
-            <p>Работают в реальном времени только в Цветном и Художественном режимах.</p>
-
-            <label>
-              <span>Оттенок <output id="redEffectValue">100%</output></span>
-              <input id="redEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
-            </label>
-
-            <label>
-              <span>Насыщенность <output id="greenEffectValue">100%</output></span>
-              <input id="greenEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
-            </label>
-
-            <label>
-              <span>Пространство <output id="blueEffectValue">100%</output></span>
-              <input id="blueEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
             </label>
           </section>
 
@@ -124,19 +125,9 @@
         </section>
 
         <section class="visuals" aria-label="Предпросмотр изображения">
-          <div class="panel preview-panel original-panel">
-            <div class="panel-title">
-              <h2>Исходное изображение</h2>
-            </div>
-            <div class="image-frame">
-              <img id="originalImage" alt="Предпросмотр исходного изображения">
-              <span id="originalPlaceholder">Изображение не загружено</span>
-            </div>
-          </div>
-
           <div class="panel preview-panel spectrogram-panel">
             <div class="panel-title">
-              <h2>Спектрограмма яркости</h2>
+              <h2>Спектрограмма</h2>
             </div>
             <div class="spectrogram-plot">
               <div class="axis-label y-axis">Частота</div>
@@ -152,6 +143,16 @@
               <label><input id="invertCheckbox" type="checkbox"> Инвертировать яркость</label>
               <label><input id="reverseCheckbox" type="checkbox"> Обратить время</label>
               <label><input id="loopCheckbox" type="checkbox" checked> Зациклить</label>
+            </div>
+          </div>
+
+          <div class="panel preview-panel original-panel">
+            <div class="panel-title">
+              <h2>Исходное изображение</h2>
+            </div>
+            <div class="image-frame">
+              <img id="originalImage" alt="Предпросмотр исходного изображения">
+              <span id="originalPlaceholder">Изображение не загружено</span>
             </div>
           </div>
         </section>
