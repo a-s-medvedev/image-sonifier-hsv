@@ -1,6 +1,8 @@
 const state = {
   audioContext: null,
   source: null,
+  audioElementSource: null,
+  graphInputNode: null,
   rawPixels: null,
   processedPixels: null,
   width: 0,
@@ -12,6 +14,9 @@ const state = {
   generationId: 0,
   cachedAudioBuffer: null,
   cachedAudioKey: "",
+  playerUrl: null,
+  playerAudioKey: "",
+  userInteracted: false,
   outputGain: null,
   timbreFilter: null,
   timbreShaper: null,
@@ -34,6 +39,7 @@ const elements = {
   originalImage: document.getElementById("originalImage"),
   originalFrame: document.querySelector(".image-frame"),
   previewCanvas: document.getElementById("previewCanvas"),
+  audioPlayer: document.getElementById("audioPlayer"),
   playButton: document.getElementById("playButton"),
   stopButton: document.getElementById("stopButton"),
   exportButton: document.getElementById("exportButton"),
@@ -75,9 +81,26 @@ elements.playButton.addEventListener("click", playAudio);
 elements.stopButton.addEventListener("click", stopAudio);
 elements.exportButton.addEventListener("click", exportWav);
 elements.loopCheckbox.addEventListener("change", () => {
-  if (state.source) {
-    state.source.loop = elements.loopCheckbox.checked;
-  }
+  elements.audioPlayer.loop = elements.loopCheckbox.checked;
+});
+
+elements.audioPlayer.addEventListener("play", () => {
+  safeResumeAudioContext();
+  startAudioElementPlayheadAnimation();
+});
+
+elements.audioPlayer.addEventListener("pause", () => {
+  if (elements.audioPlayer.ended) return;
+  stopPlayheadAnimation(false);
+});
+
+elements.audioPlayer.addEventListener("ended", () => {
+  stopPlayheadAnimation();
+  setStatus("Воспроизведение завершено.");
+});
+
+["pointerdown", "touchstart", "keydown"].forEach((eventName) => {
+  document.addEventListener(eventName, rememberUserInteraction, { once: true, passive: true });
 });
 
 elements.volumeSlider.addEventListener("input", () => {
@@ -525,29 +548,21 @@ async function playAudio() {
     return;
   }
 
-  stopAudio();
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  state.audioContext = state.audioContext || new AudioContextClass();
-  await state.audioContext.resume();
+  if (AudioContextClass && !state.audioContext) {
+    state.audioContext = new AudioContextClass();
+  }
+  safeResumeAudioContext();
 
-  const buffer = await getAudioBufferForCurrentSettings(state.audioContext, "Подготовка звука...", "Подготовка звука остановлена.");
-  if (!buffer) {
+  const isPrepared = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
+  if (!isPrepared) {
     return;
   }
 
-  state.source = state.audioContext.createBufferSource();
-  state.source.buffer = buffer;
-  state.source.loop = elements.loopCheckbox.checked;
-  connectRealtimeAudioGraph(state.audioContext, state.source);
-  const startedAt = state.audioContext.currentTime;
-  state.source.onended = () => {
-    disconnectRealtimeAudioGraph();
-    state.source = null;
-    stopPlayheadAnimation();
-    setStatus("Воспроизведение завершено.");
-  };
-  state.source.start();
-  startPlayheadAnimation(startedAt, buffer.duration);
+  connectAudioElementGraph();
+  elements.audioPlayer.loop = elements.loopCheckbox.checked;
+  elements.audioPlayer.currentTime = 0;
+  safePlayAudio();
   setGenerating(false);
   setStatus("");
 }
@@ -564,6 +579,14 @@ function stopAudio() {
     state.source.disconnect();
     state.source = null;
     disconnectRealtimeAudioGraph();
+    stopPlayheadAnimation();
+    setStatus("Воспроизведение остановлено.");
+    return;
+  }
+
+  if (!elements.audioPlayer.paused || elements.audioPlayer.currentTime > 0) {
+    elements.audioPlayer.pause();
+    elements.audioPlayer.currentTime = 0;
     stopPlayheadAnimation();
     setStatus("Воспроизведение остановлено.");
   }
@@ -596,8 +619,86 @@ async function exportWav() {
   setStatus("WAV экспортирован.");
 }
 
+async function prepareAudioPlayer(startMessage, stoppedMessage) {
+  if (!state.audioContext) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      setStatus("Этот браузер не поддерживает Web Audio API.");
+      return false;
+    }
+    state.audioContext = new AudioContextClass();
+  }
+
+  const audioKey = getAudioCacheKey(state.audioContext);
+  if (state.playerUrl && state.playerAudioKey === audioKey) {
+    setGenerationProgress(100);
+    return true;
+  }
+
+  const buffer = await getAudioBufferForCurrentSettings(state.audioContext, startMessage, stoppedMessage);
+  if (!buffer) {
+    return false;
+  }
+
+  const wavBlob = audioBufferToWav(buffer);
+  const wavUrl = URL.createObjectURL(wavBlob);
+  releaseObjectUrlLater(state.playerUrl);
+
+  state.playerUrl = wavUrl;
+  state.playerAudioKey = audioKey;
+  elements.audioPlayer.src = wavUrl;
+  elements.audioPlayer.loop = elements.loopCheckbox.checked;
+  elements.audioPlayer.load();
+  return true;
+}
+
+function connectAudioElementGraph() {
+  if (!state.audioContext) return;
+
+  try {
+    if (!state.audioElementSource) {
+      state.audioElementSource = state.audioContext.createMediaElementSource(elements.audioPlayer);
+    }
+    connectRealtimeAudioGraph(state.audioContext, state.audioElementSource);
+  } catch (error) {
+    updateRealtimeAudioControls();
+  }
+}
+
+function rememberUserInteraction() {
+  state.userInteracted = true;
+}
+
+function safeResumeAudioContext() {
+  if (!state.audioContext || state.audioContext.state !== "suspended") {
+    return;
+  }
+
+  const resumePromise = state.audioContext.resume();
+  if (resumePromise && typeof resumePromise.catch === "function") {
+    resumePromise.catch(() => {
+      setStatus("Если звук не запускается, нажмите Play еще раз.");
+    });
+  }
+}
+
+function safePlayAudio() {
+  const playPromise = elements.audioPlayer.play();
+  if (playPromise && typeof playPromise.catch === "function") {
+    playPromise.catch(() => {
+      setStatus("Если звук не запускается, нажмите Play еще раз.");
+    });
+  }
+}
+
+function releaseObjectUrlLater(url) {
+  if (!url) return;
+  window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 function connectRealtimeAudioGraph(audioContext, source) {
   disconnectRealtimeAudioGraph();
+  state.graphInputNode = source;
 
   state.timbreFilter = audioContext.createBiquadFilter();
   state.timbreFilter.type = "peaking";
@@ -635,6 +736,14 @@ function connectRealtimeAudioGraph(audioContext, source) {
 }
 
 function disconnectRealtimeAudioGraph() {
+  if (state.graphInputNode) {
+    try {
+      state.graphInputNode.disconnect();
+    } catch (error) {
+      // The input can already be disconnected after media-element playback ends.
+    }
+  }
+
   [
     state.outputGain,
     state.timbreFilter,
@@ -647,9 +756,16 @@ function disconnectRealtimeAudioGraph() {
     state.rightFeedbackGain,
     state.wetGain
   ].forEach((node) => {
-    if (node) node.disconnect();
+    if (node) {
+      try {
+        node.disconnect();
+      } catch (error) {
+        // Some browsers throw when disconnecting an already disconnected node.
+      }
+    }
   });
 
+  state.graphInputNode = null;
   state.outputGain = null;
   state.timbreFilter = null;
   state.timbreShaper = null;
@@ -663,10 +779,12 @@ function disconnectRealtimeAudioGraph() {
 }
 
 function updateRealtimeAudioControls() {
+  const volume = Number(elements.volumeSlider.value);
+  elements.audioPlayer.volume = volume;
+
   if (!state.audioContext) return;
 
   const now = state.audioContext.currentTime;
-  const volume = Number(elements.volumeSlider.value);
   const timbreEnabled = elements.modeSelect.value !== "scientific";
   const hueAmount = timbreEnabled ? Number(elements.redEffectSlider.value) : 0;
   const saturationAmount = timbreEnabled ? Number(elements.greenEffectSlider.value) : 0;
@@ -785,7 +903,18 @@ function getAudioCacheKey(audioContext) {
 function clearAudioCache() {
   state.cachedAudioBuffer = null;
   state.cachedAudioKey = "";
+  clearPlayerCache();
   setGenerationProgress(0);
+}
+
+function clearPlayerCache() {
+  if (state.playerUrl) {
+    releaseObjectUrlLater(state.playerUrl);
+  }
+  state.playerUrl = null;
+  state.playerAudioKey = "";
+  elements.audioPlayer.removeAttribute("src");
+  elements.audioPlayer.load();
 }
 
 function drawPreview() {
@@ -1260,6 +1389,28 @@ function circularHueAverage(sinTotal, cosTotal) {
   return (Math.atan2(sinTotal, cosTotal) / TWO_PI + 1) % 1;
 }
 
+function startAudioElementPlayheadAnimation() {
+  stopPlayheadAnimation(false);
+  elements.playhead.classList.add("active");
+
+  const step = () => {
+    if (elements.audioPlayer.paused || !Number.isFinite(elements.audioPlayer.duration) || elements.audioPlayer.duration <= 0) {
+      state.playheadFrame = requestAnimationFrame(step);
+      return;
+    }
+
+    const audioProgress = clamp(elements.audioPlayer.currentTime / elements.audioPlayer.duration, 0, 1);
+    const visualProgress = elements.reverseCheckbox.checked ? 1 - audioProgress : audioProgress;
+    updatePlayheadVisual(visualProgress);
+
+    if (!elements.audioPlayer.ended) {
+      state.playheadFrame = requestAnimationFrame(step);
+    }
+  };
+
+  state.playheadFrame = requestAnimationFrame(step);
+}
+
 function startPlayheadAnimation(startedAt, duration) {
   stopPlayheadAnimation(false);
   elements.playhead.classList.add("active");
@@ -1276,13 +1427,7 @@ function startPlayheadAnimation(startedAt, duration) {
       ? (elapsed % duration) / duration
       : clamp(elapsed / duration, 0, 1);
     const visualProgress = elements.reverseCheckbox.checked ? 1 - audioProgress : audioProgress;
-    const profile = getColumnGlowProfile(visualProgress);
-    elements.playhead.style.left = `${visualProgress * 100}%`;
-    elements.playhead.style.setProperty("--playhead-gradient", profile.gradient);
-    elements.playhead.style.setProperty("--playhead-glow", `${Math.round(16 + profile.intensity * 70)}px`);
-    elements.playhead.style.setProperty("--playhead-alpha", (0.52 + profile.intensity * 0.46).toFixed(2));
-    elements.playhead.style.setProperty("--playhead-alpha-soft", (0.38 + profile.intensity * 0.52).toFixed(2));
-    elements.playhead.style.setProperty("--playhead-width-boost", `${(profile.intensity * 10).toFixed(1)}px`);
+    updatePlayheadVisual(visualProgress);
 
     if (isLooping || audioProgress < 1) {
       state.playheadFrame = requestAnimationFrame(step);
@@ -1290,6 +1435,16 @@ function startPlayheadAnimation(startedAt, duration) {
   };
 
   state.playheadFrame = requestAnimationFrame(step);
+}
+
+function updatePlayheadVisual(visualProgress) {
+  const profile = getColumnGlowProfile(visualProgress);
+  elements.playhead.style.left = `${visualProgress * 100}%`;
+  elements.playhead.style.setProperty("--playhead-gradient", profile.gradient);
+  elements.playhead.style.setProperty("--playhead-glow", `${Math.round(16 + profile.intensity * 70)}px`);
+  elements.playhead.style.setProperty("--playhead-alpha", (0.52 + profile.intensity * 0.46).toFixed(2));
+  elements.playhead.style.setProperty("--playhead-alpha-soft", (0.38 + profile.intensity * 0.52).toFixed(2));
+  elements.playhead.style.setProperty("--playhead-width-boost", `${(profile.intensity * 10).toFixed(1)}px`);
 }
 
 function stopPlayheadAnimation(resetPosition = true) {

@@ -279,6 +279,38 @@ button:disabled {
   color: var(--accent-dark);
 }
 
+.compact-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.compact-player audio {
+  width: min(100%, 420px);
+  height: 34px;
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.compact-player .check-row {
+  flex: 0 0 auto;
+  color: #eef2f7;
+  font-size: 0.8rem;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.check-row input {
+  inline-size: 18px;
+  block-size: 18px;
+  accent-color: var(--accent);
+}
+
 .readiness-control {
   gap: 6px;
   padding-top: 2px;
@@ -646,6 +678,16 @@ canvas {
 
   .button-row {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .compact-player {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .compact-player audio {
+    width: 100%;
   }
 
   .spectrogram-options {

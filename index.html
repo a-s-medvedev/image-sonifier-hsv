@@ -38,6 +38,13 @@
               <button id="stopButton" class="secondary-action" type="button">Стоп</button>
               <button id="exportButton" class="secondary-action" type="button">Экспорт WAV</button>
             </div>
+            <div class="compact-player">
+              <audio id="audioPlayer" controls preload="auto" playsinline webkit-playsinline></audio>
+              <label class="check-row" for="loopCheckbox">
+                <input id="loopCheckbox" type="checkbox" checked>
+                Зациклить
+              </label>
+            </div>
             <label class="readiness-control">
               <span><output id="readinessValue">0%</output></span>
               <progress id="readinessProgress" max="100" value="0"></progress>
@@ -163,7 +170,6 @@
             <div class="checkbox-grid spectrogram-options">
               <label><input id="invertCheckbox" type="checkbox"> Инвертировать яркость</label>
               <label><input id="reverseCheckbox" type="checkbox"> Обратить время</label>
-              <label><input id="loopCheckbox" type="checkbox" checked> Зациклить</label>
             </div>
           </div>
         </section>
