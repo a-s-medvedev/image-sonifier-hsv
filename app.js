@@ -29,7 +29,9 @@ const state = {
   wetGain: null,
   playheadFrame: null,
   sourceImage: null,
-  sourceIsDefaultImage: false
+  sourceIsDefaultImage: false,
+  usingBundledDefaultAudio: false,
+  bundledAudioPromise: null
 };
 
 const elements = {
@@ -77,6 +79,7 @@ const elements = {
 
 const hiddenCanvas = document.createElement("canvas");
 const DEFAULT_TEST_IMAGE = "generated-test-pattern";
+const DEFAULT_AUDIO_FILE = "default-sonification.wav?v=0.4.4";
 const TWO_PI = Math.PI * 2;
 const SPECTROGRAM_COLOR_LUT = makeSpectrogramColorLut();
 
@@ -364,7 +367,7 @@ function loadGeneratedTestPattern() {
   drawPreview();
   clearAudioCache();
   setImageLoading(false, "Готово.");
-  preloadDefaultAudio();
+  loadBundledDefaultAudio();
 }
 
 function processImage() {
@@ -553,6 +556,15 @@ async function playAudio() {
   if (!ensureAudioContext()) return;
   safeResumeAudioContext();
 
+  if (state.usingBundledDefaultAudio) {
+    const bundledBuffer = state.cachedAudioBuffer || await state.bundledAudioPromise;
+    if (bundledBuffer && state.usingBundledDefaultAudio) {
+      startBufferPlayback(bundledBuffer);
+      setStatus("");
+      return;
+    }
+  }
+
   const buffer = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
   if (!buffer) return;
 
@@ -561,17 +573,37 @@ async function playAudio() {
   setStatus("");
 }
 
-async function preloadDefaultAudio() {
-  if (!state.imageLoaded || !state.sourceIsDefaultImage || state.isGenerating) return;
+function loadBundledDefaultAudio() {
+  state.usingBundledDefaultAudio = true;
+  setGenerationProgress(100);
+  setStatus("");
 
   const audioContext = ensureAudioContext();
-  if (!audioContext) return;
+  if (!audioContext) {
+    state.usingBundledDefaultAudio = false;
+    return;
+  }
 
-  const imageRevision = state.imageRevision;
-  const buffer = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
-  if (!buffer || !state.sourceIsDefaultImage || imageRevision !== state.imageRevision) return;
-
-  setStatus("");
+  state.bundledAudioPromise = fetch(DEFAULT_AUDIO_FILE)
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then((wavData) => audioContext.decodeAudioData(wavData))
+    .then((buffer) => {
+      if (!state.usingBundledDefaultAudio) return null;
+      state.cachedAudioBuffer = buffer;
+      state.cachedAudioKey = "bundled-default";
+      return buffer;
+    })
+    .catch(() => {
+      state.usingBundledDefaultAudio = false;
+      state.cachedAudioBuffer = null;
+      state.cachedAudioKey = "";
+      setGenerationProgress(0);
+      setStatus("Готовый аудиофайл недоступен. Звук будет рассчитан при воспроизведении.");
+      return null;
+    });
 }
 
 function stopAudio() {
@@ -971,6 +1003,8 @@ function invalidateAudioCache(clearPlayer = true) {
   }
   state.cachedAudioBuffer = null;
   state.cachedAudioKey = "";
+  state.usingBundledDefaultAudio = false;
+  state.bundledAudioPromise = null;
   if (clearPlayer) {
     clearPlayerCache();
     setGenerationProgress(0);
