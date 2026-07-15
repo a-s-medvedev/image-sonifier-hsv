@@ -1,6 +1,5 @@
 const state = {
   audioContext: null,
-  source: null,
   audioElementSource: null,
   graphInputNode: null,
   rawPixels: null,
@@ -16,7 +15,6 @@ const state = {
   cachedAudioKey: "",
   playerUrl: null,
   playerAudioKey: "",
-  userInteracted: false,
   outputGain: null,
   timbreFilter: null,
   timbreShaper: null,
@@ -40,8 +38,6 @@ const elements = {
   originalFrame: document.querySelector(".image-frame"),
   previewCanvas: document.getElementById("previewCanvas"),
   audioPlayer: document.getElementById("audioPlayer"),
-  playButton: document.getElementById("playButton"),
-  stopButton: document.getElementById("stopButton"),
   exportButton: document.getElementById("exportButton"),
   modeSelect: document.getElementById("modeSelect"),
   frequencyDetailSelect: document.getElementById("frequencyDetailSelect"),
@@ -75,13 +71,20 @@ const elements = {
 
 const hiddenCanvas = document.createElement("canvas");
 const DEFAULT_TEST_IMAGE = "generated-test-pattern";
+const TWO_PI = Math.PI * 2;
+const SPECTROGRAM_COLOR_LUT = makeSpectrogramColorLut();
 
 elements.imageInput.addEventListener("change", loadImage);
-elements.playButton.addEventListener("click", playAudio);
-elements.stopButton.addEventListener("click", stopAudio);
 elements.exportButton.addEventListener("click", exportWav);
 elements.loopCheckbox.addEventListener("change", () => {
   elements.audioPlayer.loop = elements.loopCheckbox.checked;
+});
+
+elements.audioPlayer.addEventListener("pointerdown", handleAudioPlayerPointerDown);
+
+elements.audioPlayer.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  handleAudioPlayerPointerDown(event);
 });
 
 elements.audioPlayer.addEventListener("play", () => {
@@ -99,10 +102,6 @@ elements.audioPlayer.addEventListener("ended", () => {
   setStatus("Воспроизведение завершено.");
 });
 
-["pointerdown", "touchstart", "keydown"].forEach((eventName) => {
-  document.addEventListener(eventName, rememberUserInteraction, { once: true, passive: true });
-});
-
 elements.volumeSlider.addEventListener("input", () => {
   updateLabels();
   updateRealtimeAudioControls();
@@ -115,8 +114,7 @@ elements.volumeSlider.addEventListener("input", () => {
 ].forEach((control) => {
   control.addEventListener("input", () => {
     updateLabels();
-    clearAudioCache();
-    setGenerationProgress(0);
+    invalidateAudioCache(false);
     updateRealtimeAudioControls();
   });
 });
@@ -142,18 +140,27 @@ elements.imageSizeLimitSelect.addEventListener("input", () => {
   elements.durationSlider,
   elements.minFreqSlider,
   elements.maxFreqSlider,
-  elements.contrastSlider,
-  elements.invertCheckbox,
   elements.reverseCheckbox
 ].forEach((control) => {
   control.addEventListener("input", () => {
     updateLabels();
     if (state.imageLoaded) {
-      processImage();
-      drawPreview();
       clearAudioCache();
       updateRealtimeAudioControls();
     }
+  });
+});
+
+[
+  elements.contrastSlider,
+  elements.invertCheckbox
+].forEach((control) => {
+  control.addEventListener("input", () => {
+    updateLabels();
+    if (!state.imageLoaded) return;
+    processImage();
+    drawPreview();
+    clearAudioCache();
   });
 });
 
@@ -323,15 +330,8 @@ function setImageLoading(isLoading, message = "") {
 }
 
 function storeRawPixels(data) {
-  state.rawPixels = new Float32Array(state.width * state.height * 4);
-
-  for (let i = 0; i < state.width * state.height; i += 1) {
-    const sourceIndex = i * 4;
-    state.rawPixels[sourceIndex] = data[sourceIndex] / 255;
-    state.rawPixels[sourceIndex + 1] = data[sourceIndex + 1] / 255;
-    state.rawPixels[sourceIndex + 2] = data[sourceIndex + 2] / 255;
-    state.rawPixels[sourceIndex + 3] = data[sourceIndex + 3] / 255;
-  }
+  // Native bytes use one quarter of the memory required by normalized floats.
+  state.rawPixels = new Uint8ClampedArray(data);
 }
 
 function loadGeneratedTestPattern() {
@@ -379,25 +379,43 @@ function loadGeneratedTestPattern() {
 function processImage() {
   const contrast = Number(elements.contrastSlider.value);
   const invert = elements.invertCheckbox.checked;
-  state.processedPixels = new Float32Array(state.width * state.height * 4);
+  // Store only amplitude, hue and saturation; the original value would be a
+  // duplicate of data that is never consumed by the synthesizer.
+  state.processedPixels = new Float32Array(state.width * state.height * 3);
 
   for (let i = 0; i < state.width * state.height; i += 1) {
-    const index = i * 4;
-    const r = state.rawPixels[index];
-    const g = state.rawPixels[index + 1];
-    const b = state.rawPixels[index + 2];
+    const sourceIndex = i * 4;
+    const targetIndex = i * 3;
+    const r = state.rawPixels[sourceIndex] / 255;
+    const g = state.rawPixels[sourceIndex + 1] / 255;
+    const b = state.rawPixels[sourceIndex + 2] / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const delta = max - min;
+    let hue = 0;
 
-    const hsv = rgbToHsv(r, g, b);
+    if (delta > 0) {
+      if (max === r) {
+        hue = ((g - b) / delta) % 6;
+      } else if (max === g) {
+        hue = (b - r) / delta + 2;
+      } else {
+        hue = (r - g) / delta + 4;
+      }
+      hue /= 6;
+      if (hue < 0) hue += 1;
+    }
+
+    const saturation = max === 0 ? 0 : delta / max;
 
     // HSV value controls amplitude. Contrast and inversion are applied only to
     // the loudness channel so geometry stays separate from hue and saturation.
-    let value = clamp((hsv.value - 0.5) * contrast + 0.5, 0, 1);
+    let value = clamp((max - 0.5) * contrast + 0.5, 0, 1);
     if (invert) value = 1 - value;
 
-    state.processedPixels[index] = value;
-    state.processedPixels[index + 1] = hsv.hue;
-    state.processedPixels[index + 2] = hsv.saturation;
-    state.processedPixels[index + 3] = hsv.value;
+    state.processedPixels[targetIndex] = value;
+    state.processedPixels[targetIndex + 1] = hue;
+    state.processedPixels[targetIndex + 2] = saturation;
   }
 
   state.imageRevision += 1;
@@ -425,6 +443,7 @@ async function generateAudioBuffer(audioContext, generationId) {
   const progressStep = Math.max(512, Math.floor(sampleRate / 60));
   const spectralColumns = await buildSpectralColumns(frequencyDetail, virtualRowCount, generationId);
   if (!spectralColumns) return null;
+  const mix = new Float64Array(7);
 
   // Main sonification loop:
   // X chooses time, Y chooses frequency, HSV value sets amplitude, and hue /
@@ -443,71 +462,39 @@ async function generateAudioBuffer(audioContext, generationId) {
     const leftColumnWeight = 1 - xMix;
     const rightColumnWeight = xMix;
 
-    let mono = 0;
-    let leftSample = 0;
-    let rightSample = 0;
-    let hsvWeight = 0;
-    let hueSinTotal = 0;
-    let hueCosTotal = 0;
-    let saturationTotal = 0;
-
-    ({
-      mono,
-      leftSample,
-      rightSample,
-      hsvWeight,
-      hueSinTotal,
-      hueCosTotal,
-      saturationTotal
-    } = addColumnToSample(
+    mix.fill(0);
+    addColumnToSample(
       spectralColumns[x0],
       leftColumnWeight,
       mode,
       modulation,
-      time,
       sample,
       phaseIncrements,
       rowGain,
-      mono,
-      leftSample,
-      rightSample,
-      hsvWeight,
-      hueSinTotal,
-      hueCosTotal,
-      saturationTotal
-    ));
+      mix
+    );
 
     if (x1 !== x0 && rightColumnWeight > 0) {
-      ({
-        mono,
-        leftSample,
-        rightSample,
-        hsvWeight,
-        hueSinTotal,
-        hueCosTotal,
-        saturationTotal
-      } = addColumnToSample(
+      addColumnToSample(
         spectralColumns[x1],
         rightColumnWeight,
         mode,
         modulation,
-        time,
         sample,
         phaseIncrements,
         rowGain,
-        mono,
-        leftSample,
-        rightSample,
-        hsvWeight,
-        hueSinTotal,
-        hueCosTotal,
-        saturationTotal
-      ));
+        mix
+      );
     }
 
+    let leftSample = mix[1];
+    let rightSample = mix[2];
+    const hsvWeight = mix[3];
+    const saturationTotal = mix[6];
+
     if (mode === "scientific") {
-      leftSample = mono;
-      rightSample = mono;
+      leftSample = mix[0];
+      rightSample = mix[0];
     } else if (mode === "art" && hsvWeight > 0) {
       const saturationAverage = saturationTotal / hsvWeight;
       const drive = 1 + saturationAverage * 1.8 * modulation.saturation;
@@ -522,7 +509,7 @@ async function generateAudioBuffer(audioContext, generationId) {
 
     if (mode === "art" && sample > 900 && hsvWeight > 0) {
       const saturationAverage = saturationTotal / hsvWeight;
-      const hueAverage = circularHueAverage(hueSinTotal, hueCosTotal);
+      const hueAverage = circularHueAverage(mix[4], mix[5]);
       const hueSpace = 0.65 + 0.35 * Math.sin(TWO_PI * hueAverage);
       const feedback = saturationAverage * hueSpace * 0.12 * modulation.space;
       left[sample] += right[sample - 900] * feedback;
@@ -540,24 +527,41 @@ async function generateAudioBuffer(audioContext, generationId) {
   return buffer;
 }
 
-async function playAudio() {
-  if (state.isLoadingImage || state.isGenerating) return;
+function handleAudioPlayerPointerDown(event) {
+  if (state.isLoadingImage || state.isGenerating) {
+    event.preventDefault();
+    return;
+  }
 
   if (!state.imageLoaded) {
+    event.preventDefault();
     setStatus("Сначала загрузите изображение.");
     return;
   }
 
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (AudioContextClass && !state.audioContext) {
-    state.audioContext = new AudioContextClass();
-  }
-  safeResumeAudioContext();
-
-  const isPrepared = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
-  if (!isPrepared) {
+  const audioContext = ensureAudioContext();
+  if (!audioContext) {
+    event.preventDefault();
     return;
   }
+
+  const audioKey = getAudioCacheKey(audioContext);
+  if (state.playerUrl && state.playerAudioKey === audioKey) {
+    connectAudioElementGraph();
+    return;
+  }
+
+  event.preventDefault();
+  prepareAndPlayAudio();
+}
+
+async function prepareAndPlayAudio() {
+  const audioContext = ensureAudioContext();
+  if (!audioContext) return;
+
+  safeResumeAudioContext();
+  const isPrepared = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
+  if (!isPrepared) return;
 
   connectAudioElementGraph();
   elements.audioPlayer.loop = elements.loopCheckbox.checked;
@@ -571,17 +575,6 @@ function stopAudio() {
   if (state.isGenerating) {
     state.generationId += 1;
     setGenerating(false, "Подготовка звука остановлена.");
-  }
-
-  if (state.source) {
-    state.source.onended = null;
-    state.source.stop();
-    state.source.disconnect();
-    state.source = null;
-    disconnectRealtimeAudioGraph();
-    stopPlayheadAnimation();
-    setStatus("Воспроизведение остановлено.");
-    return;
   }
 
   if (!elements.audioPlayer.paused || elements.audioPlayer.currentTime > 0) {
@@ -601,8 +594,7 @@ async function exportWav() {
   }
 
   stopAudio();
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  state.audioContext = state.audioContext || new AudioContextClass();
+  if (!ensureAudioContext()) return;
   const buffer = await getAudioBufferForCurrentSettings(state.audioContext, "Подготовка WAV...", "Экспорт WAV остановлен.");
   if (!buffer) {
     return;
@@ -620,14 +612,7 @@ async function exportWav() {
 }
 
 async function prepareAudioPlayer(startMessage, stoppedMessage) {
-  if (!state.audioContext) {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) {
-      setStatus("Этот браузер не поддерживает Web Audio API.");
-      return false;
-    }
-    state.audioContext = new AudioContextClass();
-  }
+  if (!ensureAudioContext()) return false;
 
   const audioKey = getAudioCacheKey(state.audioContext);
   if (state.playerUrl && state.playerAudioKey === audioKey) {
@@ -652,6 +637,19 @@ async function prepareAudioPlayer(startMessage, stoppedMessage) {
   return true;
 }
 
+function ensureAudioContext() {
+  if (state.audioContext) return state.audioContext;
+
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    setStatus("Этот браузер не поддерживает Web Audio API.");
+    return null;
+  }
+
+  state.audioContext = new AudioContextClass();
+  return state.audioContext;
+}
+
 function connectAudioElementGraph() {
   if (!state.audioContext) return;
 
@@ -663,10 +661,6 @@ function connectAudioElementGraph() {
   } catch (error) {
     updateRealtimeAudioControls();
   }
-}
-
-function rememberUserInteraction() {
-  state.userInteracted = true;
 }
 
 function safeResumeAudioContext() {
@@ -697,6 +691,11 @@ function releaseObjectUrlLater(url) {
 }
 
 function connectRealtimeAudioGraph(audioContext, source) {
+  if (state.graphInputNode === source && state.outputGain) {
+    updateRealtimeAudioControls();
+    return;
+  }
+
   disconnectRealtimeAudioGraph();
   state.graphInputNode = source;
 
@@ -780,7 +779,8 @@ function disconnectRealtimeAudioGraph() {
 
 function updateRealtimeAudioControls() {
   const volume = Number(elements.volumeSlider.value);
-  elements.audioPlayer.volume = volume;
+  // Web Audio owns the output level after the graph is connected.
+  elements.audioPlayer.volume = state.outputGain ? 1 : volume;
 
   if (!state.audioContext) return;
 
@@ -800,11 +800,13 @@ function updateRealtimeAudioControls() {
     const filterGain = (hueAmount - 0.55) * 10 + saturationAmount * 2.4;
     state.timbreFilter.frequency.setTargetAtTime(filterFrequency, now, 0.025);
     state.timbreFilter.Q.setTargetAtTime(0.85 + hueAmount * 1.05 + saturationAmount * 1.35, now, 0.025);
-    state.timbreFilter.gain.setTargetAtTime(filterGain, now, 0.025);
+    state.timbreFilter.gain.setTargetAtTime(timbreEnabled ? filterGain : 0, now, 0.025);
   }
 
   if (state.timbreShaper) {
-    state.timbreShaper.curve = makeSaturationCurve(1 + saturationAmount * 2.4);
+    state.timbreShaper.curve = timbreEnabled
+      ? makeSaturationCurve(1 + saturationAmount * 2.4)
+      : null;
   }
 
   if (state.leftDelayNode) {
@@ -824,7 +826,7 @@ function updateRealtimeAudioControls() {
   }
 
   if (state.wetGain) {
-    state.wetGain.gain.setTargetAtTime(Math.min(0.32, spaceAmount * 0.14), now, 0.03);
+    state.wetGain.gain.setTargetAtTime(timbreEnabled ? Math.min(0.32, spaceAmount * 0.14) : 0, now, 0.03);
   }
 }
 
@@ -901,10 +903,18 @@ function getAudioCacheKey(audioContext) {
 }
 
 function clearAudioCache() {
+  invalidateAudioCache(true);
+}
+
+function invalidateAudioCache(clearPlayer = true) {
   state.cachedAudioBuffer = null;
   state.cachedAudioKey = "";
-  clearPlayerCache();
-  setGenerationProgress(0);
+  if (clearPlayer) {
+    clearPlayerCache();
+    setGenerationProgress(0);
+  } else {
+    state.playerAudioKey = "";
+  }
 }
 
 function clearPlayerCache() {
@@ -922,12 +932,13 @@ function drawPreview() {
   const imageData = ctx.createImageData(state.width, state.height);
 
   for (let i = 0; i < state.width * state.height; i += 1) {
-    const sourceIndex = i * 4;
-    const [r, g, b] = spectrogramColorMap(state.processedPixels[sourceIndex]);
-    imageData.data[sourceIndex] = r;
-    imageData.data[sourceIndex + 1] = g;
-    imageData.data[sourceIndex + 2] = b;
-    imageData.data[sourceIndex + 3] = 255;
+    const sourceIndex = i * 3;
+    const targetIndex = i * 4;
+    const colorIndex = Math.round(clamp(state.processedPixels[sourceIndex], 0, 1) * 255) * 3;
+    imageData.data[targetIndex] = SPECTROGRAM_COLOR_LUT[colorIndex];
+    imageData.data[targetIndex + 1] = SPECTROGRAM_COLOR_LUT[colorIndex + 1];
+    imageData.data[targetIndex + 2] = SPECTROGRAM_COLOR_LUT[colorIndex + 2];
+    imageData.data[targetIndex + 3] = 255;
   }
 
   ctx.putImageData(imageData, 0, 0);
@@ -971,8 +982,8 @@ async function buildSpectralColumns(frequencyDetail, virtualRowCount, generation
       const y0 = Math.floor(sourceY);
       const y1 = Math.min(state.height - 1, y0 + 1);
       const yMix = sourceY - y0;
-      const top = (y0 * state.width + x) * 4;
-      const bottom = (y1 * state.width + x) * 4;
+      const top = (y0 * state.width + x) * 3;
+      const bottom = (y1 * state.width + x) * 3;
       const brightness = lerp(state.processedPixels[top], state.processedPixels[bottom], yMix);
 
       if (brightness <= noiseGate) continue;
@@ -981,8 +992,7 @@ async function buildSpectralColumns(frequencyDetail, virtualRowCount, generation
         y,
         brightness,
         lerpHue(state.processedPixels[top + 1], state.processedPixels[bottom + 1], yMix),
-        lerp(state.processedPixels[top + 2], state.processedPixels[bottom + 2], yMix),
-        lerp(state.processedPixels[top + 3], state.processedPixels[bottom + 3], yMix)
+        lerp(state.processedPixels[top + 2], state.processedPixels[bottom + 2], yMix)
       ]);
     }
 
@@ -1015,28 +1025,20 @@ function addColumnToSample(
   columnWeight,
   mode,
   modulation,
-  time,
   sample,
   phaseIncrements,
   rowGain,
-  mono,
-  leftSample,
-  rightSample,
-  hsvWeight,
-  hueSinTotal,
-  hueCosTotal,
-  saturationTotal
+  mix
 ) {
-  for (let i = 0; i < column.length; i += 5) {
+  for (let i = 0; i < column.length; i += 4) {
     const row = column[i] | 0;
     const value = column[i + 1] * columnWeight;
     const hue = column[i + 2];
     const saturation = column[i + 3];
-    let amplitude = value * rowGain;
+    const amplitude = value * rowGain;
 
     if (mode === "scientific") {
-      const tone = Math.sin((sample * phaseIncrements[row]) % TWO_PI) * amplitude;
-      mono += tone;
+      mix[0] += Math.sin(sample * phaseIncrements[row]) * amplitude;
     } else {
       const timbreStrength = mode === "art" ? 1.25 : 0.85;
       const richness = clamp(saturation * modulation.saturation * timbreStrength, 0, 1.8);
@@ -1059,7 +1061,7 @@ function addColumnToSample(
       for (let harmonic = 1; harmonic <= harmonicCount; harmonic += 1) {
         const increment = phaseIncrements[row] * harmonic;
         if (increment >= Math.PI) continue;
-        const phase = (sample * increment) % TWO_PI;
+        const phase = sample * increment;
 
         const partialGain = getHsvHarmonicGain(
           harmonic,
@@ -1073,26 +1075,18 @@ function addColumnToSample(
           colorExcitation,
           mode
         );
-        leftSample += Math.sin(phase - stereoPhase * harmonic) * amplitude * partialGain * leftGain;
-        rightSample += Math.sin(phase + stereoPhase * harmonic) * amplitude * partialGain * rightGain;
+        mix[1] += Math.sin(phase - stereoPhase * harmonic) * amplitude * partialGain * leftGain;
+        mix[2] += Math.sin(phase + stereoPhase * harmonic) * amplitude * partialGain * rightGain;
       }
     }
 
-    hsvWeight += value;
-    hueSinTotal += Math.sin(TWO_PI * hue) * value;
-    hueCosTotal += Math.cos(TWO_PI * hue) * value;
-    saturationTotal += saturation * value;
+    if (mode === "art") {
+      mix[3] += value;
+      mix[4] += Math.sin(TWO_PI * hue) * value;
+      mix[5] += Math.cos(TWO_PI * hue) * value;
+      mix[6] += saturation * value;
+    }
   }
-
-  return {
-    mono,
-    leftSample,
-    rightSample,
-    hsvWeight,
-    hueSinTotal,
-    hueCosTotal,
-    saturationTotal
-  };
 }
 
 function getHsvHarmonicGain(
@@ -1257,8 +1251,6 @@ function updateLabels() {
 
 function setReadyState(isReady) {
   const isBusy = state.isGenerating || state.isLoadingImage;
-  elements.playButton.disabled = !isReady || isBusy;
-  elements.stopButton.disabled = !isReady;
   elements.exportButton.disabled = !isReady || isBusy;
 }
 
@@ -1278,6 +1270,7 @@ function setGenerationProgress(value) {
   const progress = Math.round(clamp(value, 0, 100));
   elements.readinessProgress.value = progress;
   elements.readinessValue.textContent = `${progress}%`;
+  elements.readinessProgress.closest(".readiness-control")?.classList.toggle("is-complete", progress >= 100);
 }
 
 function drawAxes(minFrequency, maxFrequency, duration) {
@@ -1351,30 +1344,15 @@ function spectrogramColorMap(value) {
   return [252, 250, 190];
 }
 
-function rgbToHsv(r, g, b) {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const delta = max - min;
-  let hue = 0;
-
-  if (delta > 0) {
-    if (max === r) {
-      hue = ((g - b) / delta) % 6;
-    } else if (max === g) {
-      hue = (b - r) / delta + 2;
-    } else {
-      hue = (r - g) / delta + 4;
-    }
-
-    hue /= 6;
-    if (hue < 0) hue += 1;
+function makeSpectrogramColorLut() {
+  const lut = new Uint8ClampedArray(256 * 3);
+  for (let i = 0; i < 256; i += 1) {
+    const color = spectrogramColorMap(i / 255);
+    lut[i * 3] = color[0];
+    lut[i * 3 + 1] = color[1];
+    lut[i * 3 + 2] = color[2];
   }
-
-  return {
-    hue,
-    saturation: max === 0 ? 0 : delta / max,
-    value: max
-  };
+  return lut;
 }
 
 function lerpHue(a, b, mix) {
@@ -1404,32 +1382,6 @@ function startAudioElementPlayheadAnimation() {
     updatePlayheadVisual(visualProgress);
 
     if (!elements.audioPlayer.ended) {
-      state.playheadFrame = requestAnimationFrame(step);
-    }
-  };
-
-  state.playheadFrame = requestAnimationFrame(step);
-}
-
-function startPlayheadAnimation(startedAt, duration) {
-  stopPlayheadAnimation(false);
-  elements.playhead.classList.add("active");
-
-  const step = () => {
-    if (!state.source || !state.audioContext) {
-      stopPlayheadAnimation();
-      return;
-    }
-
-    const elapsed = state.audioContext.currentTime - startedAt;
-    const isLooping = state.source.loop;
-    const audioProgress = isLooping
-      ? (elapsed % duration) / duration
-      : clamp(elapsed / duration, 0, 1);
-    const visualProgress = elements.reverseCheckbox.checked ? 1 - audioProgress : audioProgress;
-    updatePlayheadVisual(visualProgress);
-
-    if (isLooping || audioProgress < 1) {
       state.playheadFrame = requestAnimationFrame(step);
     }
   };
@@ -1478,14 +1430,14 @@ function getColumnGlowProfile(progress) {
   const sampleCount = 24;
 
   for (let y = 0; y < state.height; y += 1) {
-    const brightness = state.processedPixels[(y * state.width + x) * 4];
+    const brightness = state.processedPixels[(y * state.width + x) * 3];
     sum += brightness;
     if (brightness > peak) peak = brightness;
   }
 
   for (let i = 0; i < sampleCount; i += 1) {
     const y = Math.round((i / (sampleCount - 1)) * (state.height - 1));
-    const brightness = state.processedPixels[(y * state.width + x) * 4];
+    const brightness = state.processedPixels[(y * state.width + x) * 3];
     const powered = Math.pow(brightness, 0.55);
     const alpha = 0.04 + powered * 0.96;
     const widthHot = Math.min(255, Math.round(150 + powered * 105));
@@ -1516,5 +1468,3 @@ function clamp(value, min, max) {
 function lerp(a, b, mix) {
   return a + (b - a) * mix;
 }
-
-const TWO_PI = Math.PI * 2;

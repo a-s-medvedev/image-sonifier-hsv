@@ -4,13 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Сонификатор изображений</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=0.3.2-final">
   </head>
   <body>
     <main class="app-shell">
       <header class="app-header">
         <div>
-          <h1>Сонификатор изображений</h1>
+          <h1>Сонификатор изображений <span class="version-label">v0.3.2</span></h1>
         </div>
       </header>
 
@@ -27,29 +27,10 @@
                 <span id="fileName" class="visually-hidden">Тестовое изображение</span>
               </span>
             </label>
-          </div>
-
-          <div class="control-group transport-group">
-            <div class="group-heading">
-              <span>Воспроизведение</span>
+            <div class="image-frame">
+              <img id="originalImage" alt="Предпросмотр исходного изображения">
+              <span id="originalPlaceholder">Изображение не загружено</span>
             </div>
-            <div class="button-row">
-              <button id="playButton" class="primary-action" type="button">Играть</button>
-              <button id="stopButton" class="secondary-action" type="button">Стоп</button>
-              <button id="exportButton" class="secondary-action" type="button">Экспорт WAV</button>
-            </div>
-            <div class="compact-player">
-              <audio id="audioPlayer" controls preload="auto" playsinline webkit-playsinline></audio>
-              <label class="check-row" for="loopCheckbox">
-                <input id="loopCheckbox" type="checkbox" checked>
-                Зациклить
-              </label>
-            </div>
-            <label class="readiness-control">
-              <span><output id="readinessValue">0%</output></span>
-              <progress id="readinessProgress" max="100" value="0"></progress>
-            </label>
-            <p id="statusText" class="status-text" role="status" aria-live="polite">Загрузка тестового изображения...</p>
           </div>
 
           <section class="control-group effect-panel" aria-label="HSV тембральные параметры">
@@ -140,17 +121,22 @@
             <p class="control-note">Режим «Без ограничений» генерирует спектрограмму в полном разрешении. Это может быть слишком тяжело для телефонов и старых компьютеров.</p>
           </section>
 
+          <section class="control-group export-group" aria-label="Экспорт WAV">
+            <button id="exportButton" class="secondary-action" type="button">Экспорт WAV</button>
+          </section>
+
         </section>
 
         <section class="visuals" aria-label="Предпросмотр изображения">
-          <div class="panel preview-panel original-panel">
-            <div class="panel-title">
-              <h2>Исходное изображение</h2>
+          <div class="panel preview-panel playback-panel">
+            <div class="compact-player">
+              <audio id="audioPlayer" controls preload="auto" playsinline webkit-playsinline></audio>
             </div>
-            <div class="image-frame">
-              <img id="originalImage" alt="Предпросмотр исходного изображения">
-              <span id="originalPlaceholder">Изображение не загружено</span>
-            </div>
+            <label class="readiness-control">
+              <span><output id="readinessValue">0%</output></span>
+              <progress id="readinessProgress" max="100" value="0"></progress>
+            </label>
+            <p id="statusText" class="status-text" role="status" aria-live="polite">Загрузка тестового изображения...</p>
           </div>
 
           <div class="panel preview-panel spectrogram-panel">
@@ -170,12 +156,13 @@
             <div class="checkbox-grid spectrogram-options">
               <label><input id="invertCheckbox" type="checkbox"> Инвертировать яркость</label>
               <label><input id="reverseCheckbox" type="checkbox"> Обратить время</label>
+              <label><input id="loopCheckbox" type="checkbox" checked> Зациклить</label>
             </div>
           </div>
         </section>
       </section>
     </main>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=0.3.2-final"></script>
   </body>
 </html>
