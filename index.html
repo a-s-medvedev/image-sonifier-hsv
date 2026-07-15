@@ -4,13 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Сонификатор изображений</title>
-    <link rel="stylesheet" href="style.css?v=0.3.3">
+    <link rel="stylesheet" href="style.css?v=0.3.4-release2">
   </head>
   <body>
     <main class="app-shell">
       <header class="app-header">
         <div>
-          <h1>Сонификатор изображений <span class="version-label">v0.3.3</span></h1>
+          <h1>Сонификатор изображений <span class="version-label">v0.3.4</span></h1>
         </div>
       </header>
 
@@ -129,6 +129,10 @@
 
         <section class="visuals" aria-label="Предпросмотр изображения">
           <div class="panel preview-panel playback-panel">
+            <div class="playback-actions">
+              <button id="playButton" class="primary-action" type="button">Играть</button>
+              <button id="stopButton" class="secondary-action" type="button">Стоп</button>
+            </div>
             <div class="compact-player">
               <audio id="audioPlayer" controls preload="auto" playsinline webkit-playsinline></audio>
             </div>
@@ -163,6 +167,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=0.3.3"></script>
+    <script src="app.js?v=0.3.4-release2"></script>
   </body>
 </html>

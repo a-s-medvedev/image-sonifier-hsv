@@ -1,5 +1,6 @@
 const state = {
   audioContext: null,
+  source: null,
   audioElementSource: null,
   graphInputNode: null,
   rawPixels: null,
@@ -28,8 +29,7 @@ const state = {
   previewObjectUrl: "",
   playheadFrame: null,
   sourceImage: null,
-  sourceIsDefaultImage: false,
-  prepareTimer: null
+  sourceIsDefaultImage: false
 };
 
 const elements = {
@@ -39,6 +39,8 @@ const elements = {
   originalFrame: document.querySelector(".image-frame"),
   previewCanvas: document.getElementById("previewCanvas"),
   audioPlayer: document.getElementById("audioPlayer"),
+  playButton: document.getElementById("playButton"),
+  stopButton: document.getElementById("stopButton"),
   exportButton: document.getElementById("exportButton"),
   modeSelect: document.getElementById("modeSelect"),
   frequencyDetailSelect: document.getElementById("frequencyDetailSelect"),
@@ -76,12 +78,16 @@ const TWO_PI = Math.PI * 2;
 const SPECTROGRAM_COLOR_LUT = makeSpectrogramColorLut();
 
 elements.imageInput.addEventListener("change", loadImage);
+elements.playButton.addEventListener("click", playAudio);
+elements.stopButton.addEventListener("click", stopAudio);
 elements.exportButton.addEventListener("click", exportWav);
 elements.loopCheckbox.addEventListener("change", () => {
   elements.audioPlayer.loop = elements.loopCheckbox.checked;
+  if (state.source) state.source.loop = elements.loopCheckbox.checked;
 });
 
 elements.audioPlayer.addEventListener("play", () => {
+  stopBufferSource(false);
   safeResumeAudioContext();
   connectAudioElementGraph();
   startAudioElementPlayheadAnimation();
@@ -95,12 +101,6 @@ elements.audioPlayer.addEventListener("pause", () => {
 elements.audioPlayer.addEventListener("ended", () => {
   stopPlayheadAnimation();
   setStatus("Воспроизведение завершено.");
-});
-
-["pointerdown", "touchstart", "keydown"].forEach((eventName) => {
-  document.addEventListener(eventName, () => {
-    if (!state.playerUrl && !state.isGenerating) scheduleAudioPreparation(0);
-  }, { once: true, passive: true });
 });
 
 elements.volumeSlider.addEventListener("input", () => {
@@ -118,7 +118,6 @@ elements.volumeSlider.addEventListener("input", () => {
     invalidateAudioCache(false);
     updateRealtimeAudioControls();
   });
-  control.addEventListener("change", () => scheduleAudioPreparation());
 });
 
 elements.imageSizeLimitSelect.addEventListener("input", () => {
@@ -128,14 +127,12 @@ elements.imageSizeLimitSelect.addEventListener("input", () => {
     setStatus("Преобразование изображения...");
     convertSourceImageToWorkingCanvas(state.sourceIsDefaultImage);
     setStatus("Готово.");
-    scheduleAudioPreparation();
     return;
   }
 
   processImage();
   drawPreview();
   clearAudioCache();
-  scheduleAudioPreparation();
 });
 
 [
@@ -151,7 +148,6 @@ elements.imageSizeLimitSelect.addEventListener("input", () => {
     if (state.imageLoaded) {
       clearAudioCache();
       updateRealtimeAudioControls();
-      scheduleAudioPreparation();
     }
   });
 });
@@ -166,7 +162,6 @@ elements.imageSizeLimitSelect.addEventListener("input", () => {
     processImage();
     drawPreview();
     clearAudioCache();
-    scheduleAudioPreparation();
   });
 });
 
@@ -248,7 +243,6 @@ function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
 
     if (!convertSourceImageToWorkingCanvas(isDefaultTestImage)) return;
     setImageLoading(false, "Готово.");
-    scheduleAudioPreparation();
   } catch (error) {
     finishImageLoadError("Изображение не удалось подготовить.", isDefaultTestImage);
   }
@@ -381,7 +375,6 @@ function loadGeneratedTestPattern() {
   drawPreview();
   clearAudioCache();
   setImageLoading(false, "Готово.");
-  scheduleAudioPreparation();
 }
 
 function processImage() {
@@ -535,22 +528,35 @@ async function generateAudioBuffer(audioContext, generationId) {
   return buffer;
 }
 
-function scheduleAudioPreparation(delay = 280) {
-  window.clearTimeout(state.prepareTimer);
-  if (!state.imageLoaded || state.isLoadingImage) return;
+async function playAudio() {
+  if (state.isLoadingImage || state.isGenerating) return;
 
-  state.prepareTimer = window.setTimeout(async () => {
-    state.prepareTimer = null;
-    if (state.isGenerating) return;
-    const isPrepared = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
-    if (isPrepared) setStatus("");
-  }, delay);
+  if (!state.imageLoaded) {
+    setStatus("Сначала загрузите изображение.");
+    return;
+  }
+
+  if (!ensureAudioContext()) return;
+  safeResumeAudioContext();
+
+  const buffer = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
+  if (!buffer) return;
+
+  elements.audioPlayer.currentTime = 0;
+  startBufferPlayback(buffer);
+  setStatus("");
 }
 
 function stopAudio() {
   if (state.isGenerating) {
     state.generationId += 1;
     setGenerating(false, "Подготовка звука остановлена.");
+  }
+
+  if (stopBufferSource()) {
+    elements.audioPlayer.currentTime = 0;
+    setStatus("Воспроизведение остановлено.");
+    return;
   }
 
   if (!elements.audioPlayer.paused || elements.audioPlayer.currentTime > 0) {
@@ -593,7 +599,7 @@ async function prepareAudioPlayer(startMessage, stoppedMessage) {
   const audioKey = getAudioCacheKey(state.audioContext);
   if (state.playerUrl && state.playerAudioKey === audioKey) {
     setGenerationProgress(100);
-    return true;
+    return state.cachedAudioBuffer;
   }
 
   const buffer = await getAudioBufferForCurrentSettings(state.audioContext, startMessage, stoppedMessage);
@@ -610,7 +616,7 @@ async function prepareAudioPlayer(startMessage, stoppedMessage) {
   elements.audioPlayer.src = wavUrl;
   elements.audioPlayer.loop = elements.loopCheckbox.checked;
   elements.audioPlayer.load();
-  return true;
+  return buffer;
 }
 
 function ensureAudioContext() {
@@ -655,6 +661,49 @@ function safeResumeAudioContext() {
       setStatus("Если звук не запускается, нажмите Play еще раз.");
     });
   }
+}
+
+function startBufferPlayback(buffer) {
+  stopBufferSource(false);
+  elements.audioPlayer.pause();
+
+  const source = state.audioContext.createBufferSource();
+  source.buffer = buffer;
+  source.loop = elements.loopCheckbox.checked;
+  source.onended = () => {
+    if (state.source !== source) return;
+    state.source = null;
+    disconnectRealtimeAudioGraph();
+    stopPlayheadAnimation();
+    setStatus("Воспроизведение завершено.");
+  };
+
+  state.source = source;
+  connectRealtimeAudioGraph(state.audioContext, source);
+  const startedAt = state.audioContext.currentTime;
+  source.start();
+  startBufferPlayheadAnimation(startedAt, buffer.duration);
+}
+
+function stopBufferSource(resetPlayhead = true) {
+  if (!state.source) return false;
+
+  const source = state.source;
+  state.source = null;
+  source.onended = null;
+  try {
+    source.stop();
+  } catch (error) {
+    // The source may already have reached its natural end.
+  }
+  try {
+    source.disconnect();
+  } catch (error) {
+    // Some browsers throw when disconnecting an already disconnected source.
+  }
+  disconnectRealtimeAudioGraph();
+  stopPlayheadAnimation(resetPlayhead);
+  return true;
 }
 
 function releaseObjectUrlLater(url) {
@@ -881,8 +930,6 @@ function clearAudioCache() {
 }
 
 function invalidateAudioCache(clearPlayer = true) {
-  window.clearTimeout(state.prepareTimer);
-  state.prepareTimer = null;
   if (state.isGenerating) {
     state.generationId += 1;
     state.isGenerating = false;
@@ -1232,6 +1279,8 @@ function updateLabels() {
 
 function setReadyState(isReady) {
   const isBusy = state.isGenerating || state.isLoadingImage;
+  elements.playButton.disabled = !isReady || isBusy;
+  elements.stopButton.disabled = !isReady;
   elements.exportButton.disabled = !isReady || isBusy;
 }
 
@@ -1363,6 +1412,33 @@ function startAudioElementPlayheadAnimation() {
     updatePlayheadVisual(visualProgress);
 
     if (!elements.audioPlayer.ended) {
+      state.playheadFrame = requestAnimationFrame(step);
+    }
+  };
+
+  state.playheadFrame = requestAnimationFrame(step);
+}
+
+function startBufferPlayheadAnimation(startedAt, duration) {
+  stopPlayheadAnimation(false);
+  elements.playhead.classList.add("active");
+
+  const step = () => {
+    if (!state.source || !state.audioContext) {
+      stopPlayheadAnimation();
+      return;
+    }
+
+    const elapsed = state.audioContext.currentTime - startedAt;
+    const isLooping = state.source.loop;
+    const audioProgress = isLooping
+      ? (elapsed % duration) / duration
+      : clamp(elapsed / duration, 0, 1);
+    elements.audioPlayer.currentTime = audioProgress * duration;
+    const visualProgress = elements.reverseCheckbox.checked ? 1 - audioProgress : audioProgress;
+    updatePlayheadVisual(visualProgress);
+
+    if (isLooping || audioProgress < 1) {
       state.playheadFrame = requestAnimationFrame(step);
     }
   };

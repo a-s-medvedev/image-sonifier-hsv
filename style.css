@@ -401,6 +401,12 @@ button:disabled {
   gap: 8px;
 }
 
+.playback-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
 .panel-title {
   margin-bottom: 9px;
 }
