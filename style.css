@@ -71,7 +71,7 @@ h1 {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(250px, 290px) 1fr;
+  grid-template-columns: minmax(320px, 380px) 1fr;
   gap: 14px;
   align-items: start;
 }
@@ -437,12 +437,24 @@ canvas {
   background: var(--surface-soft);
 }
 
+.image-analysis {
+  --analysis-height: min(24vh, 190px);
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.image-frame,
+.hsv-summary {
+  height: var(--analysis-height);
+  min-height: 110px;
+}
+
 .image-frame {
   position: relative;
   display: grid;
   place-items: center;
-  height: min(22vh, 170px);
-  min-height: 92px;
   overflow: hidden;
 }
 
@@ -458,7 +470,7 @@ canvas {
   display: none;
   width: 100%;
   height: 100%;
-  padding: 4px;
+  padding: 3px;
   object-fit: contain;
   object-position: center;
   background: var(--surface);
@@ -478,33 +490,11 @@ canvas {
 }
 
 .hsv-summary {
-  display: grid;
-  gap: 4px;
-}
-
-.hsv-legend {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-  font-size: 0.67rem;
-  font-weight: 850;
-  text-align: center;
-}
-
-.hue-key {
-  color: #a23a69;
-}
-
-.saturation-key {
-  color: #087b7c;
-}
-
-.value-key {
-  color: #9a6100;
+  min-width: 0;
 }
 
 .hsv-histogram {
-  height: 54px;
+  height: 100%;
   border-color: var(--line);
   border-radius: 6px;
   background: #111723;
@@ -764,13 +754,15 @@ canvas {
     padding: 8px;
   }
 
-  .image-frame {
-    height: clamp(118px, 20vh, 172px);
-    min-height: 0;
+  .image-analysis {
+    --analysis-height: clamp(148px, 22vh, 184px);
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 6px;
   }
 
-  .hsv-histogram {
-    height: 48px;
+  .image-frame,
+  .hsv-summary {
+    min-height: 0;
   }
 
   .spectrogram-plot {

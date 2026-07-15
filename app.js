@@ -999,7 +999,7 @@ function drawHsvHistogram() {
   const width = canvas.width;
   const height = canvas.height;
   const gap = 12;
-  const panelWidth = (width - gap * 4) / 3;
+  const panelHeight = (height - gap * 4) / 3;
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#111723";
@@ -1011,19 +1011,30 @@ function drawHsvHistogram() {
     state.hsvHistograms.saturation,
     state.hsvHistograms.value
   ];
+  const labels = ["H", "S", "V"];
+  const labelColors = ["#f080b7", "#56d4ca", "#efb85a"];
 
   histograms.forEach((histogram, panelIndex) => {
     let peak = 0;
     for (const count of histogram) peak = Math.max(peak, count);
-    const xStart = gap + panelIndex * (panelWidth + gap);
+    const xStart = gap;
+    const yStart = gap + panelIndex * (panelHeight + gap);
+    const panelWidth = width - gap * 2;
     const barWidth = panelWidth / histogram.length;
+    const labelHeight = 28;
+    const plotTop = yStart + labelHeight;
+    const plotHeight = panelHeight - labelHeight - 7;
 
     ctx.fillStyle = "rgba(255, 255, 255, 0.035)";
-    ctx.fillRect(xStart, 7, panelWidth, height - 14);
+    ctx.fillRect(xStart, yStart, panelWidth, panelHeight);
+    ctx.fillStyle = labelColors[panelIndex];
+    ctx.font = "800 20px system-ui, sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText(labels[panelIndex], xStart + 8, yStart + labelHeight / 2 + 1);
 
     for (let bin = 0; bin < histogram.length; bin += 1) {
       const normalized = peak > 0 ? Math.sqrt(histogram[bin] / peak) : 0;
-      const barHeight = normalized * (height - 20);
+      const barHeight = normalized * plotHeight;
       if (panelIndex === 0) {
         ctx.fillStyle = `hsl(${Math.round((bin / histogram.length) * 360)} 78% 62%)`;
       } else if (panelIndex === 1) {
@@ -1035,7 +1046,7 @@ function drawHsvHistogram() {
       }
       ctx.fillRect(
         xStart + bin * barWidth,
-        height - 7 - barHeight,
+        plotTop + plotHeight - barHeight,
         Math.max(1, barWidth - 0.7),
         barHeight
       );

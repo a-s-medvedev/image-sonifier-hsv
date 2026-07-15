@@ -4,13 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Сонификатор изображений</title>
-    <link rel="stylesheet" href="style.css?v=0.3.5-final">
+    <link rel="stylesheet" href="style.css?v=0.3.6-final">
   </head>
   <body>
     <main class="app-shell">
       <header class="app-header">
         <div>
-          <h1>Сонификатор изображений <span class="version-label">v0.3.5</span></h1>
+          <h1>Сонификатор изображений <span class="version-label">v0.3.6</span></h1>
         </div>
       </header>
 
@@ -27,17 +27,14 @@
                 <span id="fileName" class="visually-hidden">Тестовое изображение</span>
               </span>
             </label>
-            <div class="image-frame">
-              <img id="originalImage" alt="Предпросмотр исходного изображения">
-              <span id="originalPlaceholder">Изображение не загружено</span>
-            </div>
-            <div class="hsv-summary">
-              <div class="hsv-legend" aria-hidden="true">
-                <span class="hue-key">H</span>
-                <span class="saturation-key">S</span>
-                <span class="value-key">V</span>
+            <div class="image-analysis">
+              <div class="hsv-summary">
+                <canvas id="hsvHistogramCanvas" class="hsv-histogram" width="180" height="450" aria-label="Гистограммы оттенка, насыщенности и яркости"></canvas>
               </div>
-              <canvas id="hsvHistogramCanvas" class="hsv-histogram" width="600" height="120" aria-label="Гистограммы оттенка, насыщенности и яркости"></canvas>
+              <div class="image-frame">
+                <img id="originalImage" alt="Предпросмотр исходного изображения">
+                <span id="originalPlaceholder">Изображение не загружено</span>
+              </div>
             </div>
           </div>
 
@@ -177,6 +174,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=0.3.5-final"></script>
+    <script src="app.js?v=0.3.6-final"></script>
   </body>
 </html>
