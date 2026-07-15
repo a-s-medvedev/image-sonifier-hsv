@@ -27,7 +27,6 @@ const state = {
   leftFeedbackGain: null,
   rightFeedbackGain: null,
   wetGain: null,
-  previewObjectUrl: "",
   playheadFrame: null,
   sourceImage: null,
   sourceIsDefaultImage: false
@@ -36,8 +35,6 @@ const state = {
 const elements = {
   imageInput: document.getElementById("imageInput"),
   fileName: document.getElementById("fileName"),
-  originalImage: document.getElementById("originalImage"),
-  originalFrame: document.querySelector(".image-frame"),
   previewCanvas: document.getElementById("previewCanvas"),
   hsvHistogramCanvas: document.getElementById("hsvHistogramCanvas"),
   audioPlayer: document.getElementById("audioPlayer"),
@@ -203,10 +200,7 @@ function loadImage(event) {
     return;
   }
 
-  loadImageElement(objectUrl, isDefaultTestImage, null, () => {
-    URL.revokeObjectURL(objectUrl);
-    loadFileWithReader(source, isDefaultTestImage);
-  });
+  loadImageElement(objectUrl, isDefaultTestImage, () => loadFileWithReader(source, isDefaultTestImage));
 }
 
 function loadFileWithReader(file, isDefaultTestImage) {
@@ -216,16 +210,21 @@ function loadFileWithReader(file, isDefaultTestImage) {
   reader.readAsDataURL(file);
 }
 
-function loadImageElement(src, isDefaultTestImage, cleanup = null, fallback = null) {
+function loadImageElement(src, isDefaultTestImage, fallback = null) {
   const image = new Image();
+  const releaseObjectUrl = () => {
+    if (typeof src === "string" && src.startsWith("blob:")) {
+      URL.revokeObjectURL(src);
+    }
+  };
 
   image.onload = () => {
-    if (cleanup) cleanup();
-    handleLoadedImage(image, src, isDefaultTestImage);
+    handleLoadedImage(image, isDefaultTestImage);
+    releaseObjectUrl();
   };
 
   image.onerror = () => {
-    if (cleanup) cleanup();
+    releaseObjectUrl();
     if (fallback) {
       fallback();
       return;
@@ -236,16 +235,12 @@ function loadImageElement(src, isDefaultTestImage, cleanup = null, fallback = nu
   image.src = src;
 }
 
-function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
+function handleLoadedImage(image, isDefaultTestImage) {
   try {
     setStatus("Обработка изображения...");
 
     state.sourceImage = image;
     state.sourceIsDefaultImage = isDefaultTestImage;
-    setOriginalPreview(previewSrc);
-    elements.originalFrame.classList.add("has-image");
-    elements.originalFrame.style.setProperty("--image-aspect", `${image.naturalWidth} / ${image.naturalHeight}`);
-
     if (!convertSourceImageToWorkingCanvas(isDefaultTestImage)) return;
     setImageLoading(false, "Готово.");
   } catch (error) {
@@ -306,18 +301,6 @@ function fitImageToSelectedLimit(width, height) {
   };
 }
 
-function setOriginalPreview(src) {
-  if (state.previewObjectUrl && state.previewObjectUrl !== src) {
-    URL.revokeObjectURL(state.previewObjectUrl);
-    state.previewObjectUrl = "";
-  }
-
-  elements.originalImage.src = src;
-  if (typeof src === "string" && src.startsWith("blob:")) {
-    state.previewObjectUrl = src;
-  }
-}
-
 function finishImageLoadError(message, isDefaultTestImage) {
   if (isDefaultTestImage) {
     loadGeneratedTestPattern();
@@ -347,9 +330,6 @@ function loadGeneratedTestPattern() {
   hiddenCanvas.height = state.height;
   elements.previewCanvas.width = state.width;
   elements.previewCanvas.height = state.height;
-  elements.originalFrame.classList.add("has-image");
-  elements.originalFrame.style.setProperty("--image-aspect", `${state.width} / ${state.height}`);
-
   const ctx = hiddenCanvas.getContext("2d", { willReadFrequently: true });
   const imageData = ctx.createImageData(state.width, state.height);
 
@@ -373,7 +353,6 @@ function loadGeneratedTestPattern() {
   }
 
   ctx.putImageData(imageData, 0, 0);
-  setOriginalPreview(hiddenCanvas.toDataURL("image/png"));
   storeRawPixels(imageData.data);
   state.imageLoaded = true;
   processImage();
