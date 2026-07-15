@@ -4,13 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Сонификатор изображений</title>
-    <link rel="stylesheet" href="style.css?v=0.4.0-final">
+    <link rel="stylesheet" href="style.css?v=0.4.1-final">
   </head>
   <body>
     <main class="app-shell">
       <header class="app-header">
         <div>
-          <h1>Сонификатор изображений <span class="version-label">v0.4.0</span></h1>
+          <h1>Сонификатор изображений <span class="version-label">v0.4.1</span></h1>
         </div>
       </header>
 
@@ -27,8 +27,13 @@
                 <span id="fileName" class="visually-hidden">Тестовое изображение</span>
               </span>
             </label>
-            <div class="hsv-summary">
-              <canvas id="hsvHistogramCanvas" class="hsv-histogram" width="600" height="360" aria-label="Гистограммы оттенка, насыщенности и яркости"></canvas>
+            <div class="image-analysis">
+              <div class="hsv-summary">
+                <canvas id="hsvHistogramCanvas" class="hsv-histogram" width="180" height="450" aria-label="Гистограммы оттенка, насыщенности и яркости"></canvas>
+              </div>
+              <div class="source-canvas-wrap">
+                <canvas id="originalCanvas" width="256" height="128" aria-label="Исходное изображение"></canvas>
+              </div>
             </div>
           </div>
 
@@ -168,6 +173,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=0.4.0-final"></script>
+    <script src="app.js?v=0.4.1-final"></script>
   </body>
 </html>

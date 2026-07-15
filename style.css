@@ -436,8 +436,17 @@ canvas {
   background: var(--surface-soft);
 }
 
-.hsv-summary {
-  height: min(24vh, 190px);
+.image-analysis {
+  --analysis-height: min(24vh, 190px);
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+}
+
+.hsv-summary,
+.source-canvas-wrap {
+  height: var(--analysis-height);
   min-height: 110px;
   min-width: 0;
 }
@@ -448,6 +457,22 @@ canvas {
   border-radius: 6px;
   background: #111723;
   image-rendering: auto;
+}
+
+.source-canvas-wrap {
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: #090b16;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.source-canvas-wrap canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  border: 0;
+  border-radius: 6px;
 }
 
 canvas {
@@ -703,8 +728,14 @@ canvas {
     padding: 8px;
   }
 
-  .hsv-summary {
-    height: clamp(148px, 22vh, 184px);
+  .image-analysis {
+    --analysis-height: clamp(148px, 22vh, 184px);
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .hsv-summary,
+  .source-canvas-wrap {
     min-height: 0;
   }
 

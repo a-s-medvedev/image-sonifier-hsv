@@ -35,6 +35,7 @@ const state = {
 const elements = {
   imageInput: document.getElementById("imageInput"),
   fileName: document.getElementById("fileName"),
+  originalCanvas: document.getElementById("originalCanvas"),
   previewCanvas: document.getElementById("previewCanvas"),
   hsvHistogramCanvas: document.getElementById("hsvHistogramCanvas"),
   audioPlayer: document.getElementById("audioPlayer"),
@@ -275,6 +276,7 @@ function convertSourceImageToWorkingCanvas(isDefaultTestImage) {
   }
 
   storeRawPixels(data);
+  drawOriginalPreview();
   state.imageLoaded = true;
   processImage();
   drawPreview();
@@ -354,6 +356,7 @@ function loadGeneratedTestPattern() {
 
   ctx.putImageData(imageData, 0, 0);
   storeRawPixels(imageData.data);
+  drawOriginalPreview();
   state.imageLoaded = true;
   processImage();
   drawPreview();
@@ -420,6 +423,14 @@ function processImage() {
   };
   drawHsvHistogram();
   state.imageRevision += 1;
+}
+
+function drawOriginalPreview() {
+  elements.originalCanvas.width = state.width;
+  elements.originalCanvas.height = state.height;
+  const ctx = elements.originalCanvas.getContext("2d");
+  ctx.clearRect(0, 0, state.width, state.height);
+  ctx.drawImage(hiddenCanvas, 0, 0, state.width, state.height);
 }
 
 async function generateAudioBuffer(audioContext, generationId) {
