@@ -4,13 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Сонификатор изображений</title>
-    <link rel="stylesheet" href="style.css?v=0.3.4-release2">
+    <link rel="stylesheet" href="style.css?v=0.3.5-final">
   </head>
   <body>
     <main class="app-shell">
       <header class="app-header">
         <div>
-          <h1>Сонификатор изображений <span class="version-label">v0.3.4</span></h1>
+          <h1>Сонификатор изображений <span class="version-label">v0.3.5</span></h1>
         </div>
       </header>
 
@@ -30,6 +30,14 @@
             <div class="image-frame">
               <img id="originalImage" alt="Предпросмотр исходного изображения">
               <span id="originalPlaceholder">Изображение не загружено</span>
+            </div>
+            <div class="hsv-summary">
+              <div class="hsv-legend" aria-hidden="true">
+                <span class="hue-key">H</span>
+                <span class="saturation-key">S</span>
+                <span class="value-key">V</span>
+              </div>
+              <canvas id="hsvHistogramCanvas" class="hsv-histogram" width="600" height="120" aria-label="Гистограммы оттенка, насыщенности и яркости"></canvas>
             </div>
           </div>
 
@@ -129,13 +137,15 @@
 
         <section class="visuals" aria-label="Предпросмотр изображения">
           <div class="panel preview-panel playback-panel">
-            <div class="playback-actions">
+            <div class="playback-toolbar">
               <button id="playButton" class="primary-action" type="button">Играть</button>
               <button id="stopButton" class="secondary-action" type="button">Стоп</button>
+              <span class="playback-time"><output id="playbackElapsed">0:00</output><span>/</span><output id="playbackDuration">0:05</output></span>
             </div>
-            <div class="compact-player">
-              <audio id="audioPlayer" controls preload="auto" playsinline webkit-playsinline></audio>
+            <div class="playback-track" role="progressbar" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="playbackFill" class="playback-fill"></div>
             </div>
+            <audio id="audioPlayer" class="audio-engine" preload="auto" playsinline webkit-playsinline aria-hidden="true"></audio>
             <label class="readiness-control">
               <span><output id="readinessValue">0%</output></span>
               <progress id="readinessProgress" max="100" value="0"></progress>
@@ -167,6 +177,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=0.3.4-release2"></script>
+    <script src="app.js?v=0.3.5-final"></script>
   </body>
 </html>

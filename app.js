@@ -5,6 +5,7 @@ const state = {
   graphInputNode: null,
   rawPixels: null,
   processedPixels: null,
+  hsvHistograms: null,
   width: 0,
   height: 0,
   imageLoaded: false,
@@ -38,6 +39,7 @@ const elements = {
   originalImage: document.getElementById("originalImage"),
   originalFrame: document.querySelector(".image-frame"),
   previewCanvas: document.getElementById("previewCanvas"),
+  hsvHistogramCanvas: document.getElementById("hsvHistogramCanvas"),
   audioPlayer: document.getElementById("audioPlayer"),
   playButton: document.getElementById("playButton"),
   stopButton: document.getElementById("stopButton"),
@@ -67,6 +69,9 @@ const elements = {
   greenEffectValue: document.getElementById("greenEffectValue"),
   blueEffectValue: document.getElementById("blueEffectValue"),
   readinessValue: document.getElementById("readinessValue"),
+  playbackElapsed: document.getElementById("playbackElapsed"),
+  playbackDuration: document.getElementById("playbackDuration"),
+  playbackFill: document.getElementById("playbackFill"),
   freqAxis: document.getElementById("freqAxis"),
   timeAxis: document.getElementById("timeAxis"),
   playhead: document.getElementById("playhead")
@@ -380,6 +385,10 @@ function loadGeneratedTestPattern() {
 function processImage() {
   const contrast = Number(elements.contrastSlider.value);
   const invert = elements.invertCheckbox.checked;
+  const histogramBins = 48;
+  const hueHistogram = new Float32Array(histogramBins);
+  const saturationHistogram = new Uint32Array(histogramBins);
+  const valueHistogram = new Uint32Array(histogramBins);
   // Store only amplitude, hue and saturation; the original value would be a
   // duplicate of data that is never consumed by the synthesizer.
   state.processedPixels = new Float32Array(state.width * state.height * 3);
@@ -408,6 +417,12 @@ function processImage() {
     }
 
     const saturation = max === 0 ? 0 : delta / max;
+    if (saturation > 0.015) {
+      const hueBin = Math.min(histogramBins - 1, Math.floor(hue * histogramBins));
+      hueHistogram[hueBin] += 0.2 + saturation * 0.8;
+    }
+    saturationHistogram[Math.min(histogramBins - 1, Math.floor(saturation * histogramBins))] += 1;
+    valueHistogram[Math.min(histogramBins - 1, Math.floor(max * histogramBins))] += 1;
 
     // HSV value controls amplitude. Contrast and inversion are applied only to
     // the loudness channel so geometry stays separate from hue and saturation.
@@ -419,6 +434,12 @@ function processImage() {
     state.processedPixels[targetIndex + 2] = saturation;
   }
 
+  state.hsvHistograms = {
+    hue: hueHistogram,
+    saturation: saturationHistogram,
+    value: valueHistogram
+  };
+  drawHsvHistogram();
   state.imageRevision += 1;
 }
 
@@ -972,6 +993,56 @@ function drawPreview() {
   ctx.putImageData(imageData, 0, 0);
 }
 
+function drawHsvHistogram() {
+  const canvas = elements.hsvHistogramCanvas;
+  const ctx = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
+  const gap = 12;
+  const panelWidth = (width - gap * 4) / 3;
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#111723";
+  ctx.fillRect(0, 0, width, height);
+  if (!state.hsvHistograms) return;
+
+  const histograms = [
+    state.hsvHistograms.hue,
+    state.hsvHistograms.saturation,
+    state.hsvHistograms.value
+  ];
+
+  histograms.forEach((histogram, panelIndex) => {
+    let peak = 0;
+    for (const count of histogram) peak = Math.max(peak, count);
+    const xStart = gap + panelIndex * (panelWidth + gap);
+    const barWidth = panelWidth / histogram.length;
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.035)";
+    ctx.fillRect(xStart, 7, panelWidth, height - 14);
+
+    for (let bin = 0; bin < histogram.length; bin += 1) {
+      const normalized = peak > 0 ? Math.sqrt(histogram[bin] / peak) : 0;
+      const barHeight = normalized * (height - 20);
+      if (panelIndex === 0) {
+        ctx.fillStyle = `hsl(${Math.round((bin / histogram.length) * 360)} 78% 62%)`;
+      } else if (panelIndex === 1) {
+        const lightness = 74 - (bin / histogram.length) * 34;
+        ctx.fillStyle = `hsl(181 62% ${lightness}%)`;
+      } else {
+        const lightness = 24 + (bin / histogram.length) * 54;
+        ctx.fillStyle = `hsl(39 84% ${lightness}%)`;
+      }
+      ctx.fillRect(
+        xStart + bin * barWidth,
+        height - 7 - barHeight,
+        Math.max(1, barWidth - 0.7),
+        barHeight
+      );
+    }
+  });
+}
+
 function makeRowFrequencies(minFrequency, maxFrequency, rowCount) {
   const frequencies = new Float32Array(rowCount);
 
@@ -1274,6 +1345,7 @@ function updateLabels() {
   elements.redEffectValue.textContent = `${Math.round(Number(elements.redEffectSlider.value) * 100)}%`;
   elements.greenEffectValue.textContent = `${Math.round(Number(elements.greenEffectSlider.value) * 100)}%`;
   elements.blueEffectValue.textContent = `${Math.round(Number(elements.blueEffectSlider.value) * 100)}%`;
+  elements.playbackDuration.textContent = formatTime(Number(elements.durationSlider.value));
   drawAxes(minFrequency, maxFrequency, Number(elements.durationSlider.value));
 }
 
@@ -1300,7 +1372,9 @@ function setGenerationProgress(value) {
   const progress = Math.round(clamp(value, 0, 100));
   elements.readinessProgress.value = progress;
   elements.readinessValue.textContent = `${progress}%`;
-  elements.readinessProgress.closest(".readiness-control")?.classList.toggle("is-complete", progress >= 100);
+  const readinessControl = elements.readinessProgress.closest(".readiness-control");
+  readinessControl?.classList.toggle("is-idle", progress === 0);
+  readinessControl?.classList.toggle("is-complete", progress >= 100);
 }
 
 function drawAxes(minFrequency, maxFrequency, duration) {
@@ -1409,6 +1483,7 @@ function startAudioElementPlayheadAnimation() {
 
     const audioProgress = clamp(elements.audioPlayer.currentTime / elements.audioPlayer.duration, 0, 1);
     const visualProgress = elements.reverseCheckbox.checked ? 1 - audioProgress : audioProgress;
+    updatePlaybackPosition(audioProgress, elements.audioPlayer.duration);
     updatePlayheadVisual(visualProgress);
 
     if (!elements.audioPlayer.ended) {
@@ -1435,6 +1510,7 @@ function startBufferPlayheadAnimation(startedAt, duration) {
       ? (elapsed % duration) / duration
       : clamp(elapsed / duration, 0, 1);
     elements.audioPlayer.currentTime = audioProgress * duration;
+    updatePlaybackPosition(audioProgress, duration);
     const visualProgress = elements.reverseCheckbox.checked ? 1 - audioProgress : audioProgress;
     updatePlayheadVisual(visualProgress);
 
@@ -1464,6 +1540,7 @@ function stopPlayheadAnimation(resetPosition = true) {
 
   elements.playhead.classList.remove("active");
   if (resetPosition) {
+    updatePlaybackPosition(0, Number(elements.durationSlider.value));
     elements.playhead.style.left = "0";
     elements.playhead.style.setProperty("--playhead-glow", "0px");
     elements.playhead.style.setProperty("--playhead-alpha", "0.48");
@@ -1471,6 +1548,24 @@ function stopPlayheadAnimation(resetPosition = true) {
     elements.playhead.style.setProperty("--playhead-width-boost", "0px");
     elements.playhead.style.removeProperty("--playhead-gradient");
   }
+}
+
+function updatePlaybackPosition(progress, duration) {
+  const normalized = clamp(progress, 0, 1);
+  const safeDuration = Number.isFinite(duration) && duration > 0
+    ? duration
+    : Number(elements.durationSlider.value);
+  elements.playbackFill.style.width = `${normalized * 100}%`;
+  elements.playbackFill.parentElement.setAttribute("aria-valuenow", String(Math.round(normalized * 100)));
+  elements.playbackElapsed.textContent = formatTime(normalized * safeDuration);
+  elements.playbackDuration.textContent = formatTime(safeDuration);
+}
+
+function formatTime(seconds) {
+  const safeSeconds = Math.max(0, Number.isFinite(seconds) ? seconds : 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = Math.floor(safeSeconds % 60);
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 function getColumnGlowProfile(progress) {
