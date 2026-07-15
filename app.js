@@ -853,7 +853,7 @@ function updateRealtimeAudioControls() {
 
   if (state.timbreShaper) {
     state.timbreShaper.curve = timbreEnabled
-      ? makeSaturationCurve(1 + saturationAmount * 2.4)
+      ? makeTimbreCurve(hueAmount, saturationAmount)
       : null;
   }
 
@@ -878,14 +878,21 @@ function updateRealtimeAudioControls() {
   }
 }
 
-function makeSaturationCurve(amount) {
+function makeTimbreCurve(hueAmount, saturationAmount) {
   const length = 1024;
   const curve = new Float32Array(length);
-  const drive = Math.max(1, amount);
+  const waveMorph = clamp(hueAmount / 2, 0, 1);
+  const drive = 1 + saturationAmount * 1.2 + waveMorph * 5.5;
+  const positiveDrive = drive * (1 + waveMorph * 0.65);
+  const negativeDrive = drive * (1 - waveMorph * 0.25);
+  const wet = 0.08 + waveMorph * 0.9;
 
   for (let i = 0; i < length; i += 1) {
     const x = (i / (length - 1)) * 2 - 1;
-    curve[i] = Math.tanh(x * drive) / Math.tanh(drive);
+    const shaped = x >= 0
+      ? Math.tanh(x * positiveDrive) / Math.tanh(positiveDrive)
+      : Math.tanh(x * negativeDrive) / Math.tanh(negativeDrive);
+    curve[i] = x * (1 - wet) + shaped * wet;
   }
 
   return curve;
@@ -1086,7 +1093,7 @@ function makePhaseIncrements(rowFrequencies, sampleRate) {
 async function buildSpectralColumns(frequencyDetail, virtualRowCount, generationId) {
   const columns = new Array(state.width);
   const noiseGate = 0.06;
-  const maxActiveBins = frequencyDetail === 2 ? 64 : 96;
+  const maxActiveBins = frequencyDetail === 2 ? 48 : 64;
 
   for (let x = 0; x < state.width; x += 1) {
     if (generationId !== state.generationId) return null;
@@ -1156,21 +1163,22 @@ function addColumnToSample(
     if (mode === "scientific") {
       mix[0] += Math.sin(sample * phaseIncrements[row]) * amplitude;
     } else {
-      const timbreStrength = mode === "art" ? 1.25 : 0.85;
-      const richness = clamp(saturation * modulation.saturation * timbreStrength, 0, 1.8);
-      const hueInfluence = clamp(modulation.hue, 0, 2) * (0.25 + saturation * 0.75);
-      const colorExcitation = hueInfluence * (0.48 + saturation * 0.52);
-      const harmonicCount = mode === "art"
-        ? 1 + Math.min(9, Math.floor(Math.max(richness * 4.2, colorExcitation * 5.2)))
-        : 1 + Math.min(6, Math.floor(Math.max(richness * 3.2, colorExcitation * 3.8)));
+      const waveMorph = clamp(modulation.hue / 2, 0, 1);
+      const richness = clamp(saturation * modulation.saturation * 1.5 * waveMorph, 0, 1.8);
+      const hueInfluence = waveMorph * 2 * (0.2 + saturation * 0.8);
+      const colorExcitation = waveMorph * 2 * (0.42 + saturation * 0.58);
+      const harmonicCount = 1 + Math.min(
+        9,
+        Math.floor(Math.max(richness * 3.2, Math.pow(waveMorph, 1.5) * 9))
+      );
       const spatialAmount = modulation.space * (0.2 + saturation * 0.8);
       const pan = Math.sin(TWO_PI * hue) * 0.62 * spatialAmount;
       const leftGain = Math.cos((pan + 1) * Math.PI / 4);
       const rightGain = Math.sin((pan + 1) * Math.PI / 4);
-      const stereoPhase = spatialAmount * (mode === "art" ? 0.42 : 0.26) * Math.sin(TWO_PI * hue + row * 0.17);
+      const stereoPhase = spatialAmount * 0.42 * Math.sin(TWO_PI * hue + row * 0.17);
       const hueShape = 0.5 + 0.5 * Math.sin(TWO_PI * hue - Math.PI / 2);
-      const formantCenter = 1 + hueShape * (mode === "art" ? 7.2 : 5.8) * hueInfluence;
-      const formantWidth = Math.max(0.42, (mode === "art" ? 0.95 : 1.18) - hueInfluence * 0.28);
+      const formantCenter = 1 + hueShape * 7.2 * hueInfluence;
+      const formantWidth = Math.max(0.42, 0.95 - hueInfluence * 0.28);
       const evenBias = 0.34 + (0.5 + hueInfluence * 0.38) * (0.5 + 0.5 * Math.sin(TWO_PI * hue));
       const oddBias = 0.36 + (0.48 + hueInfluence * 0.35) * (0.5 + 0.5 * Math.cos(TWO_PI * hue + Math.PI / 3));
 
@@ -1189,6 +1197,7 @@ function addColumnToSample(
           hue,
           hueInfluence,
           colorExcitation,
+          waveMorph,
           mode
         );
         mix[1] += Math.sin(phase - stereoPhase * harmonic) * amplitude * partialGain * leftGain;
@@ -1215,6 +1224,7 @@ function getHsvHarmonicGain(
   hue,
   hueInfluence,
   colorExcitation,
+  waveMorph,
   mode
 ) {
   const saturationGain = clamp(richness, 0, 1.8);
@@ -1231,8 +1241,11 @@ function getHsvHarmonicGain(
     return baseGain * fundamentalColor * (0.72 + 0.28 * formant) * (0.84 + 0.16 * harmonicColor);
   }
 
-  const excitationGain = hueDepth * hueTimbre / Math.pow(harmonic, mode === "art" ? 0.72 : 0.9);
-  return baseGain * formant * harmonicColor + excitationGain * (0.55 + hueInfluence * 0.28);
+  const excitationGain = hueDepth * hueTimbre / Math.pow(harmonic, 0.72);
+  const sawComponent = waveMorph * (0.7 + saturationGain * 0.22) / harmonic;
+  return baseGain * formant * harmonicColor
+    + excitationGain * (0.55 + hueInfluence * 0.28)
+    + sawComponent;
 }
 
 function getHueTimbreGain(harmonic, hue, mode) {

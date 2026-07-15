@@ -4,13 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Сонификатор изображений</title>
-    <link rel="stylesheet" href="style.css?v=0.4.2-final">
+    <link rel="stylesheet" href="style.css?v=0.4.3-final">
   </head>
   <body>
     <main class="app-shell">
       <header class="app-header">
         <div>
-          <h1>Сонификатор изображений <span class="version-label">v0.4.2</span></h1>
+          <h1>Сонификатор изображений <span class="version-label">v0.4.3</span></h1>
         </div>
       </header>
 
@@ -57,7 +57,7 @@
               <input id="blueEffectSlider" type="range" min="0" max="2" step="0.05" value="1">
             </label>
 
-            <p>Применяются только в Цветном и Художественном режиме. Работают в реальном времени.</p>
+            <p>Применяются только в Художественном режиме. Работают в реальном времени.</p>
           </section>
 
           <section class="control-group signal-group" aria-label="Настройки звука">
@@ -99,11 +99,10 @@
               Режим
               <select id="modeSelect">
                 <option value="scientific">Научный</option>
-                <option value="color" selected>Цветной</option>
-                <option value="art">Художественный</option>
+                <option value="art" selected>Художественный</option>
               </select>
             </label>
-            <p class="control-note">Цветной и Художественный режимы учитывают цвет изображения.</p>
+            <p class="control-note">Художественный режим учитывает цвет изображения.</p>
 
             <label>
               Детализация частот
@@ -173,6 +172,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=0.4.2-final"></script>
+    <script src="app.js?v=0.4.3-final"></script>
   </body>
 </html>
