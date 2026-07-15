@@ -326,6 +326,8 @@ function storeRawPixels(data) {
 }
 
 function loadGeneratedTestPattern() {
+  state.sourceImage = null;
+  state.sourceIsDefaultImage = true;
   state.width = 1024;
   state.height = 512;
   hiddenCanvas.width = state.width;
@@ -362,6 +364,7 @@ function loadGeneratedTestPattern() {
   drawPreview();
   clearAudioCache();
   setImageLoading(false, "Готово.");
+  preloadDefaultAudio();
 }
 
 function processImage() {
@@ -555,6 +558,19 @@ async function playAudio() {
 
   elements.audioPlayer.currentTime = 0;
   startBufferPlayback(buffer);
+  setStatus("");
+}
+
+async function preloadDefaultAudio() {
+  if (!state.imageLoaded || !state.sourceIsDefaultImage || state.isGenerating) return;
+
+  const audioContext = ensureAudioContext();
+  if (!audioContext) return;
+
+  const imageRevision = state.imageRevision;
+  const buffer = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
+  if (!buffer || !state.sourceIsDefaultImage || imageRevision !== state.imageRevision) return;
+
   setStatus("");
 }
 
