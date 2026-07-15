@@ -28,7 +28,8 @@ const state = {
   previewObjectUrl: "",
   playheadFrame: null,
   sourceImage: null,
-  sourceIsDefaultImage: false
+  sourceIsDefaultImage: false,
+  prepareTimer: null
 };
 
 const elements = {
@@ -80,15 +81,9 @@ elements.loopCheckbox.addEventListener("change", () => {
   elements.audioPlayer.loop = elements.loopCheckbox.checked;
 });
 
-elements.audioPlayer.addEventListener("pointerdown", handleAudioPlayerPointerDown);
-
-elements.audioPlayer.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  handleAudioPlayerPointerDown(event);
-});
-
 elements.audioPlayer.addEventListener("play", () => {
   safeResumeAudioContext();
+  connectAudioElementGraph();
   startAudioElementPlayheadAnimation();
 });
 
@@ -100,6 +95,12 @@ elements.audioPlayer.addEventListener("pause", () => {
 elements.audioPlayer.addEventListener("ended", () => {
   stopPlayheadAnimation();
   setStatus("Воспроизведение завершено.");
+});
+
+["pointerdown", "touchstart", "keydown"].forEach((eventName) => {
+  document.addEventListener(eventName, () => {
+    if (!state.playerUrl && !state.isGenerating) scheduleAudioPreparation(0);
+  }, { once: true, passive: true });
 });
 
 elements.volumeSlider.addEventListener("input", () => {
@@ -117,6 +118,7 @@ elements.volumeSlider.addEventListener("input", () => {
     invalidateAudioCache(false);
     updateRealtimeAudioControls();
   });
+  control.addEventListener("change", () => scheduleAudioPreparation());
 });
 
 elements.imageSizeLimitSelect.addEventListener("input", () => {
@@ -126,12 +128,14 @@ elements.imageSizeLimitSelect.addEventListener("input", () => {
     setStatus("Преобразование изображения...");
     convertSourceImageToWorkingCanvas(state.sourceIsDefaultImage);
     setStatus("Готово.");
+    scheduleAudioPreparation();
     return;
   }
 
   processImage();
   drawPreview();
   clearAudioCache();
+  scheduleAudioPreparation();
 });
 
 [
@@ -147,6 +151,7 @@ elements.imageSizeLimitSelect.addEventListener("input", () => {
     if (state.imageLoaded) {
       clearAudioCache();
       updateRealtimeAudioControls();
+      scheduleAudioPreparation();
     }
   });
 });
@@ -161,6 +166,7 @@ elements.imageSizeLimitSelect.addEventListener("input", () => {
     processImage();
     drawPreview();
     clearAudioCache();
+    scheduleAudioPreparation();
   });
 });
 
@@ -242,6 +248,7 @@ function handleLoadedImage(image, previewSrc, isDefaultTestImage) {
 
     if (!convertSourceImageToWorkingCanvas(isDefaultTestImage)) return;
     setImageLoading(false, "Готово.");
+    scheduleAudioPreparation();
   } catch (error) {
     finishImageLoadError("Изображение не удалось подготовить.", isDefaultTestImage);
   }
@@ -374,6 +381,7 @@ function loadGeneratedTestPattern() {
   drawPreview();
   clearAudioCache();
   setImageLoading(false, "Готово.");
+  scheduleAudioPreparation();
 }
 
 function processImage() {
@@ -527,48 +535,16 @@ async function generateAudioBuffer(audioContext, generationId) {
   return buffer;
 }
 
-function handleAudioPlayerPointerDown(event) {
-  if (state.isLoadingImage || state.isGenerating) {
-    event.preventDefault();
-    return;
-  }
+function scheduleAudioPreparation(delay = 280) {
+  window.clearTimeout(state.prepareTimer);
+  if (!state.imageLoaded || state.isLoadingImage) return;
 
-  if (!state.imageLoaded) {
-    event.preventDefault();
-    setStatus("Сначала загрузите изображение.");
-    return;
-  }
-
-  const audioContext = ensureAudioContext();
-  if (!audioContext) {
-    event.preventDefault();
-    return;
-  }
-
-  const audioKey = getAudioCacheKey(audioContext);
-  if (state.playerUrl && state.playerAudioKey === audioKey) {
-    connectAudioElementGraph();
-    return;
-  }
-
-  event.preventDefault();
-  prepareAndPlayAudio();
-}
-
-async function prepareAndPlayAudio() {
-  const audioContext = ensureAudioContext();
-  if (!audioContext) return;
-
-  safeResumeAudioContext();
-  const isPrepared = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
-  if (!isPrepared) return;
-
-  connectAudioElementGraph();
-  elements.audioPlayer.loop = elements.loopCheckbox.checked;
-  elements.audioPlayer.currentTime = 0;
-  safePlayAudio();
-  setGenerating(false);
-  setStatus("");
+  state.prepareTimer = window.setTimeout(async () => {
+    state.prepareTimer = null;
+    if (state.isGenerating) return;
+    const isPrepared = await prepareAudioPlayer("Подготовка звука...", "Подготовка звука остановлена.");
+    if (isPrepared) setStatus("");
+  }, delay);
 }
 
 function stopAudio() {
@@ -646,7 +622,12 @@ function ensureAudioContext() {
     return null;
   }
 
-  state.audioContext = new AudioContextClass();
+  try {
+    state.audioContext = new AudioContextClass();
+  } catch (error) {
+    setStatus("Коснитесь экрана, чтобы подготовить звук.");
+    return null;
+  }
   return state.audioContext;
 }
 
@@ -671,15 +652,6 @@ function safeResumeAudioContext() {
   const resumePromise = state.audioContext.resume();
   if (resumePromise && typeof resumePromise.catch === "function") {
     resumePromise.catch(() => {
-      setStatus("Если звук не запускается, нажмите Play еще раз.");
-    });
-  }
-}
-
-function safePlayAudio() {
-  const playPromise = elements.audioPlayer.play();
-  if (playPromise && typeof playPromise.catch === "function") {
-    playPromise.catch(() => {
       setStatus("Если звук не запускается, нажмите Play еще раз.");
     });
   }
@@ -872,7 +844,9 @@ async function getAudioBufferForCurrentSettings(audioContext, startMessage, stop
   const generationId = state.generationId;
   const buffer = await generateAudioBuffer(audioContext, generationId);
   if (!buffer || generationId !== state.generationId) {
-    setGenerating(false, stoppedMessage);
+    if (generationId === state.generationId) {
+      setGenerating(false, stoppedMessage);
+    }
     return null;
   }
 
@@ -907,6 +881,13 @@ function clearAudioCache() {
 }
 
 function invalidateAudioCache(clearPlayer = true) {
+  window.clearTimeout(state.prepareTimer);
+  state.prepareTimer = null;
+  if (state.isGenerating) {
+    state.generationId += 1;
+    state.isGenerating = false;
+    setReadyState(state.imageLoaded);
+  }
   state.cachedAudioBuffer = null;
   state.cachedAudioKey = "";
   if (clearPlayer) {
